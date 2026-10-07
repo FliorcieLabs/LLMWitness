@@ -23,6 +23,12 @@
 - Bounded gateway audit parsing for large JSON responses and corrected byte truncation metadata.
 - Excluded generated benchmark results from source distributions.
 - Disabled automatic package publication; release workflows now validate artifacts only.
+- Redacted tuple, set, and frozenset values that previously reached telemetry unscrubbed.
+- Rejected non-finite JSON number literals with 422 instead of failing while rendering the validation error.
+- Stopped allow-list placeholder tokens supplied in model output from being rewritten into allow-listed terms.
+- Stopped an inline `data:image` payload from swallowing the text that follows it.
+- Mapped receipt-directory creation failures to 507 alongside the existing write failures.
+- Added edge-case suites for redaction, key handling, the SDK queue and lifecycle, both services, and the CLI.
 
 ## 0.1.0 — 2026-08-07
 

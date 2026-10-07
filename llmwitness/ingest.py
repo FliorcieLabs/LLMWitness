@@ -12,6 +12,7 @@ from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, Header, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -36,6 +37,26 @@ app = FastAPI(
     description="Localhost telemetry collector with tamper-evident receipts",
     version="0.1.0",
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def handle_invalid_payload(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Reject invalid telemetry without echoing input FastAPI cannot serialize.
+
+    The default handler returns the offending value, so a bare JSON ``NaN``
+    literal raises inside the error response and the request fails as a 500.
+    """
+    detail = [
+        {
+            "loc": [str(part) for part in error.get("loc", ())],
+            "msg": str(error.get("msg", "")),
+            "type": str(error.get("type", "")),
+        }
+        for error in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": detail})
 
 
 @app.middleware("http")
@@ -309,6 +330,11 @@ async def seal_session_audit(
     receipt_path = RECEIPT_DIR / f"{correlation_id}.json"
     try:
         RECEIPT_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=507, detail="Receipt directory could not be created"
+        ) from exc
+    try:
         _persist_receipt(receipt_path, receipt)
     except _ReceiptAlreadyExistsError as exc:
         raise HTTPException(
