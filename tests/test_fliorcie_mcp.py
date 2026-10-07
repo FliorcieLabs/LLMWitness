@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from llmwitness.mcp_server import TOOLS, call_tool, handle_message
 
 
@@ -31,6 +33,8 @@ def test_mcp_recovery_keeps_unknown_and_reliability_is_machine_readable():
 
 def test_repo_extensions_exist_and_private_pack_is_ignored():
     root = Path(__file__).resolve().parents[1]
+    if not (root / ".codex").is_dir():
+        pytest.skip("private agent configuration is not part of this checkout")
     assert (root / ".codex" / "config.toml").is_file()
     assert len(list((root / ".codex" / "agents").glob("*.toml"))) == 3
     skills = list((root / ".agents" / "skills").glob("*/SKILL.md"))

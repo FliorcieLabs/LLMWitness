@@ -1,0 +1,387 @@
+{
+  "$defs": {
+    "CRMUpdateJob": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter": {
+          "const": "reference.crm-update",
+          "title": "Adapter",
+          "type": "string"
+        },
+        "approval_id": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Approval Id"
+        },
+        "contract": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProjectContractConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "delegation_depth": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Delegation Depth",
+          "type": "integer"
+        },
+        "job_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Job Id",
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/$defs/CRMUpdateRequest"
+        },
+        "risk_tier": {
+          "$ref": "#/$defs/RiskTier"
+        }
+      },
+      "required": [
+        "job_id",
+        "risk_tier",
+        "adapter",
+        "request"
+      ],
+      "title": "CRMUpdateJob",
+      "type": "object"
+    },
+    "CRMUpdateRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "maxProperties": 100,
+          "minProperties": 1,
+          "title": "Fields",
+          "type": "object"
+        },
+        "idempotency_key": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Idempotency Key"
+        },
+        "record_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Record Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "record_id",
+        "fields"
+      ],
+      "title": "CRMUpdateRequest",
+      "type": "object"
+    },
+    "JsonValue": {},
+    "ProjectActorConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Agent Id",
+          "type": "string"
+        },
+        "principal_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Principal Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "agent_id",
+        "principal_id"
+      ],
+      "title": "ProjectActorConfig",
+      "type": "object"
+    },
+    "ProjectAuthorityConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_effects": {
+          "items": {
+            "enum": [
+              "reference.refund",
+              "reference.crm-update"
+            ],
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 1,
+          "title": "Allowed Effects",
+          "type": "array"
+        },
+        "allowed_principals": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "title": "Allowed Principals",
+          "type": "array"
+        },
+        "maximum_delegation_depth": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Maximum Delegation Depth",
+          "type": "integer"
+        },
+        "maximum_risk": {
+          "$ref": "#/$defs/RiskTier",
+          "default": "R2"
+        },
+        "policy_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Policy Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "policy_id",
+        "allowed_effects",
+        "allowed_principals"
+      ],
+      "title": "ProjectAuthorityConfig",
+      "type": "object"
+    },
+    "ProjectContractConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "budgets": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Budgets",
+          "type": "object"
+        },
+        "contract_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Contract Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "contract_id"
+      ],
+      "title": "ProjectContractConfig",
+      "type": "object"
+    },
+    "ProjectJournalConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "default": ".llmwitness/journal.db",
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "title": "ProjectJournalConfig",
+      "type": "object"
+    },
+    "RefundJob": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter": {
+          "const": "reference.refund",
+          "title": "Adapter",
+          "type": "string"
+        },
+        "approval_id": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Approval Id"
+        },
+        "contract": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProjectContractConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "delegation_depth": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Delegation Depth",
+          "type": "integer"
+        },
+        "job_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Job Id",
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/$defs/RefundRequest"
+        },
+        "risk_tier": {
+          "$ref": "#/$defs/RiskTier"
+        },
+        "simulate_response_loss": {
+          "default": false,
+          "title": "Simulate Response Loss",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "job_id",
+        "risk_tier",
+        "adapter",
+        "request"
+      ],
+      "title": "RefundJob",
+      "type": "object"
+    },
+    "RefundRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "exclusiveMinimum": 0,
+          "title": "Amount",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Idempotency Key"
+        },
+        "payment_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Payment Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "payment_id",
+        "amount"
+      ],
+      "title": "RefundRequest",
+      "type": "object"
+    },
+    "RiskTier": {
+      "enum": [
+        "R0",
+        "R1",
+        "R2",
+        "R3"
+      ],
+      "title": "RiskTier",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "$ref": "#/$defs/ProjectActorConfig"
+    },
+    "authority": {
+      "$ref": "#/$defs/ProjectAuthorityConfig"
+    },
+    "contract": {
+      "$ref": "#/$defs/ProjectContractConfig"
+    },
+    "jobs": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "reference.crm-update": "#/$defs/CRMUpdateJob",
+            "reference.refund": "#/$defs/RefundJob"
+          },
+          "propertyName": "adapter"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/RefundJob"
+          },
+          {
+            "$ref": "#/$defs/CRMUpdateJob"
+          }
+        ]
+      },
+      "maxItems": 100,
+      "minItems": 1,
+      "title": "Jobs",
+      "type": "array"
+    },
+    "journal": {
+      "$ref": "#/$defs/ProjectJournalConfig"
+    },
+    "project_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Project Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "0.1",
+      "default": "0.1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "actor",
+    "authority",
+    "contract",
+    "jobs"
+  ],
+  "title": "ProjectConfig",
+  "type": "object"
+}
