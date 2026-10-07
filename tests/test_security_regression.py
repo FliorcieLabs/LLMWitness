@@ -19,7 +19,7 @@ def test_pii_scrubbing_never_leaks_tokens():
     sensitive_inputs = [
         ("sk-abcdef1234567890abcdef1234567890", "[REDACTED_API_TOKEN]"),
         ("123-45-6789", "[REDACTED_SSN]"),
-        ("4111-2222-3333-4444", "[REDACTED_CREDIT_CARD]"),
+        ("4111-1111-1111-1111", "[REDACTED_CREDIT_CARD]"),
         (
             "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0",
             "[REDACTED_API_TOKEN]",

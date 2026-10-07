@@ -19,6 +19,12 @@ The output records the commit, timestamp, Python runtime, dependency versions, o
 - [Reference report](REFERENCE_RESULTS.md)
 - [Raw JSON](results/windows-python314-ddb2cd5.json)
 
-The reference measures five bounded local operations: pattern scrubbing of a documented 168-byte payload, Ed25519 signing, Ed25519 verification, SDK event recording into its local bounded queue with a stubbed successful delivery client, and an in-process mock-gateway request. It does not measure an external model provider, network latency, sustained throughput, multi-user operation, production capacity, or competing products.
+The reference measures bounded local operations: pattern scrubbing, Ed25519
+signing/verification, local Passport issue/verification/Runtime mapping, SDK
+event recording into a local bounded queue with a stubbed delivery client, and
+an in-process mock-gateway request. Passport cases use in-process keys and
+caller-supplied status: they do not measure external issuer trust, revocation
+network latency, standard interoperability, sustained throughput, multi-user
+operation, production capacity, or competing products.
 
 Results describe only the recorded run and are not service-level objectives or universal performance claims. Rerun the harness on your own target system before making engineering decisions.

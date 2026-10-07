@@ -1,0 +1,48 @@
+{
+  "schema_version": "0.1",
+  "project_id": "reference-refund",
+  "actor": {
+    "agent_id": "reference-workflow-agent",
+    "principal_id": "local-user"
+  },
+  "authority": {
+    "policy_id": "reference-local-policy",
+    "allowed_effects": [
+      "reference.refund",
+      "reference.crm-update"
+    ],
+    "allowed_principals": [
+      "local-user"
+    ],
+    "maximum_risk": "R2",
+    "maximum_delegation_depth": 0
+  },
+  "contract": {
+    "contract_id": "refund-local-contract",
+    "budgets": {
+      "amount": 100.0
+    }
+  },
+  "journal": {
+    "path": ".llmwitness/journal.db"
+  },
+  "jobs": [
+    {
+      "job_id": "refund-payment",
+      "risk_tier": "R2",
+      "delegation_depth": 0,
+      "contract": {
+        "contract_id": "refund-local-contract",
+        "budgets": {
+          "amount": 100.0
+        }
+      },
+      "adapter": "reference.refund",
+      "request": {
+        "payment_id": "payment-demo-001",
+        "amount": 25
+      },
+      "simulate_response_loss": true
+    }
+  ]
+}

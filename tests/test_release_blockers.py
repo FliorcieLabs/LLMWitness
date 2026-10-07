@@ -20,6 +20,9 @@ def test_benchmark_harness_smoke():
         "redact_payload",
         "ed25519_sign",
         "ed25519_verify",
+        "passport_issue",
+        "passport_verify",
+        "passport_runtime_map",
         "sdk_record_event",
         "mock_gateway_request",
     }

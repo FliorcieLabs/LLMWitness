@@ -4,7 +4,15 @@ include NOTICE
 include pyproject.toml
 include llmwitness.js
 
-recursive-include extension *.json *.js
+recursive-include extension *.json *.js *.html
 recursive-include benchmarks *.py *.md *.json
 recursive-include examples *.py *.md
+include schemas/execution-envelope-v0.1.schema.json
+prune benchmarks/results
+exclude benchmarks/COMMUNITY_E2E_RESULTS.md
+exclude benchmarks/benchmark_community_workflow.py
+exclude examples/passport_reference.py
+prune examples/projects
+exclude schemas/agent-evidence-record-v0.1.schema.json
+exclude schemas/fliorcie-project-v0.1.schema.json
 prune tests

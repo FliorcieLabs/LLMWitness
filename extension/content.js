@@ -2,6 +2,9 @@
  * LLMWitness opt-in localhost content script (Manifest V3).
  * Captures structural DOM mutations and user interactions correlated by X-LLMWitness-Correlation-ID.
  * Includes adaptive throttling & noise filtering for high-frequency React/Vue SPA re-renders.
+ *
+ * Nothing is observed until the user allows this site from the extension popup,
+ * and a visible indicator stays on the page for as long as capture is active.
  */
 
 (function () {
@@ -9,7 +12,10 @@
   const CORRELATION_ATTRIBUTE = 'data-llmwitness-correlation-id';
   const CORRELATION_EVENT = 'llmwitness:correlation-id';
   const UUIDV7_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const ALLOWED_ORIGINS_STORAGE_KEY = 'llmwitnessAllowedOrigins';
+  const INDICATOR_ID = 'llmwitness-capture-indicator';
   let activeCorrelationId = null;
+  let capturing = false;
 
   function safePageUrl() {
     return `${window.location.origin}${window.location.pathname}`;
@@ -77,8 +83,33 @@
     if (isUUIDv7(cid)) publishCorrelationId(cid);
   });
 
-  // Establish the shared UUIDv7 before the first observed mutation or input.
-  getActiveCorrelationId();
+  function showIndicator() {
+    if (!document.documentElement || document.getElementById(INDICATOR_ID)) return;
+    const host = document.createElement('div');
+    host.id = INDICATOR_ID;
+    // A closed shadow root keeps page styles from hiding or restyling the notice.
+    const root = host.attachShadow ? host.attachShadow({ mode: 'closed' }) : host;
+    const badge = document.createElement('div');
+    badge.textContent = '\u25CF LLMWitness is recording this page';
+    badge.setAttribute('role', 'status');
+    badge.style.cssText = [
+      'position:fixed', 'right:12px', 'bottom:12px', 'z-index:2147483647',
+      'padding:6px 10px', 'border-radius:6px', 'background:#8a1c1c', 'color:#fff',
+      'font:12px/1.4 system-ui,sans-serif', 'pointer-events:none',
+      'box-shadow:0 1px 4px rgba(0,0,0,.35)'
+    ].join(';');
+    root.appendChild(badge);
+    document.documentElement.appendChild(host);
+  }
+
+  function hideIndicator() {
+    const host = document.getElementById(INDICATOR_ID);
+    if (host && host.parentNode) host.parentNode.removeChild(host);
+  }
+
+  function isIndicatorNode(node) {
+    return !!node && node.id === INDICATOR_ID;
+  }
 
   // Telemetry Throttling & Batching Queue
   let telemetryBuffer = [];
@@ -112,6 +143,7 @@
   }
 
   function sendTelemetry(eventType, elementId, domDelta) {
+    if (!capturing) return;
     // Direct UI interactions (clicks, keypresses) send immediately
     if (eventType === 'click' || eventType === 'keydown' || eventType === 'input') {
       const immediatePayload = {
@@ -149,14 +181,14 @@
       }
 
       const addedNodes = Array.from(mutation.addedNodes)
-        .filter(node => node.nodeType === 1) // Only element nodes
+        .filter(node => node.nodeType === 1 && !isIndicatorNode(node)) // Only element nodes
         .map(node => ({
           tagName: node.tagName || null,
           id: node.id || null
         }));
 
       const removedNodes = Array.from(mutation.removedNodes)
-        .filter(node => node.nodeType === 1)
+        .filter(node => node.nodeType === 1 && !isIndicatorNode(node))
         .map(node => ({
           tagName: node.tagName || null,
           id: node.id || null
@@ -174,12 +206,50 @@
     });
   });
 
-  if (document.documentElement) {
-    observer.observe(document.documentElement, {
-      childList: true,
-      subtree: true,
-      attributeFilter: ['id', 'data-llmwitness-id', 'href', 'type'] // Filter out noisy style/class attributes
+  function startCapture() {
+    if (capturing) return;
+    capturing = true;
+    // Establish the shared UUIDv7 before the first observed mutation or input.
+    getActiveCorrelationId();
+    showIndicator();
+    if (document.documentElement) {
+      observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+        attributeFilter: ['id', 'data-llmwitness-id', 'href', 'type'] // Filter out noisy style/class attributes
+      });
+    }
+  }
+
+  function stopCapture() {
+    if (!capturing) return;
+    capturing = false;
+    observer.disconnect();
+    telemetryBuffer = [];
+    hideIndicator();
+  }
+
+  function applyConsent(allowedOrigins) {
+    const allowed = Array.isArray(allowedOrigins) &&
+      allowedOrigins.includes(window.location.origin);
+    if (allowed) startCapture(); else stopCapture();
+  }
+
+  const hasExtensionApis = typeof chrome !== 'undefined' && chrome.runtime &&
+    chrome.runtime.sendMessage;
+  if (hasExtensionApis) {
+    chrome.runtime.sendMessage({ action: 'LLMWITNESS_CONSENT_QUERY' }, function (response) {
+      if (chrome.runtime.lastError) return;
+      if (response && response.allowed === true) startCapture();
     });
+    // Allowing or removing the site in the popup takes effect without a reload.
+    if (chrome.storage && chrome.storage.onChanged) {
+      chrome.storage.onChanged.addListener(function (changes, area) {
+        if (area === 'local' && changes[ALLOWED_ORIGINS_STORAGE_KEY]) {
+          applyConsent(changes[ALLOWED_ORIGINS_STORAGE_KEY].newValue);
+        }
+      });
+    }
   }
 
   // 2. Click Event Listener

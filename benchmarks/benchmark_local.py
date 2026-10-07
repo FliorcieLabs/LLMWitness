@@ -24,6 +24,19 @@ from typing import Any
 import httpx
 
 from llmwitness import gateway
+from llmwitness.authority import AuthorityPolicy
+from llmwitness.envelope import RiskTier, sha256_ref
+from llmwitness.passport import (
+    InMemoryNonceReplayGuard,
+    PassportAuthorityMapper,
+    PassportCapability,
+    PassportClaims,
+    PassportInvocation,
+    PassportIssuer,
+    PassportStatus,
+    PassportTrustAnchor,
+    PassportVerifier,
+)
 from llmwitness.sdk import LLMWitnessTracker
 from llmwitness.utils import Ed25519KeyManager, canonical_json, redact_payload
 
@@ -94,6 +107,75 @@ def benchmark_sdk(iterations: int, warmup: int) -> dict[str, Any]:
     result["dropped_events"] = tracker.dropped_events
     result["delivery_failures"] = tracker.delivery_failures
     return result
+
+
+def passport_reference_case() -> dict[str, Any]:
+    """Create one isolated, in-process Passport case for local timing only."""
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    manager = Ed25519KeyManager()
+    issuer = PassportIssuer("benchmark-issuer", "benchmark-key", manager)
+    invocation = PassportInvocation(
+        principal_id="benchmark-principal",
+        agent_id="benchmark-agent",
+        audience="benchmark-service",
+        environment="local",
+        effect_name="reference.refund",
+        resource="benchmark-resource",
+        value=1,
+        risk_tier=RiskTier.R1,
+        nonce="0123456789abcdef",
+        request_hash=sha256_ref("passport-benchmark-request"),
+    )
+    claims = PassportClaims(
+        principal_id=invocation.principal_id,
+        agent_id=invocation.agent_id,
+        audience=invocation.audience,
+        environment=invocation.environment,
+        policy_version="benchmark-v1",
+        capability=PassportCapability(
+            effects=("reference.refund",),
+            resources=("benchmark-resource",),
+            maximum_value=1,
+            maximum_risk=RiskTier.R1,
+        ),
+        invocation_hash=invocation.digest(),
+        issued_at=now - timedelta(seconds=1),
+        expires_at=now + timedelta(minutes=5),
+    )
+    credential = issuer.issue(claims)
+    anchors = {
+        ("benchmark-issuer", "benchmark-key"): PassportTrustAnchor(
+            issuer_id="benchmark-issuer",
+            key_id="benchmark-key",
+            public_key_pem=manager.export_public_key_pem(),
+        )
+    }
+    verifier = PassportVerifier(replay_guard=InMemoryNonceReplayGuard())
+
+    def status(_credential: Any) -> PassportStatus:
+        return PassportStatus(active=True, checked_at=now)
+
+    verified = verifier.verify([credential], invocation, anchors, status, now=now)
+    policy = AuthorityPolicy(
+        "benchmark-policy",
+        frozenset({"reference.refund"}),
+        frozenset({"benchmark-principal"}),
+        maximum_risk=RiskTier.R1,
+    )
+    return {
+        "issuer": issuer,
+        "claims": claims,
+        "verifier": verifier,
+        "credential": credential,
+        "invocation": invocation,
+        "anchors": anchors,
+        "status": status,
+        "now": now,
+        "verification": verified,
+        "policy": policy,
+    }
 
 
 async def benchmark_gateway(iterations: int, warmup: int) -> dict[str, Any]:
@@ -182,6 +264,7 @@ def run(iterations: int, warmup: int) -> dict[str, Any]:
         {"correlation_id": "benchmark", "events": [payload]}
     )
     signature = key_manager.sign(signed_payload)
+    passport = passport_reference_case()
 
     return {
         "schema_version": 1,
@@ -214,6 +297,33 @@ def run(iterations: int, warmup: int) -> dict[str, Any]:
             ),
             "ed25519_verify": measure(
                 lambda: key_manager.verify(signed_payload, signature),
+                iterations,
+                warmup,
+            ),
+            "passport_issue": measure(
+                lambda: passport["issuer"].issue(passport["claims"]),
+                iterations,
+                warmup,
+            ),
+            "passport_verify": measure(
+                lambda: PassportVerifier(
+                    replay_guard=InMemoryNonceReplayGuard()
+                ).verify(
+                    [passport["credential"]],
+                    passport["invocation"],
+                    passport["anchors"],
+                    passport["status"],
+                    now=passport["now"],
+                ),
+                iterations,
+                warmup,
+            ),
+            "passport_runtime_map": measure(
+                lambda: PassportAuthorityMapper().evaluate(
+                    passport["verification"],
+                    passport["policy"],
+                    passport["invocation"],
+                ),
                 iterations,
                 warmup,
             ),

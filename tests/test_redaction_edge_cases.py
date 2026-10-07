@@ -128,6 +128,12 @@ def test_prose_after_a_leading_data_url_is_not_swallowed():
     assert redacted == "[REDACTED_IMAGE_PAYLOAD_SIZE_5_BYTES] hello"
 
 
+def test_valid_base64_characters_in_trailing_prose_are_not_swallowed():
+    """Spaces delimit prose even when the following word is valid Base64 text."""
+    redacted = redact_payload("data:image/png;base64,AAAA test")
+    assert redacted == "[REDACTED_IMAGE_PAYLOAD_SIZE_3_BYTES] test"
+
+
 def test_long_strings_that_are_not_valid_base64_are_left_alone():
     with_symbol = "A" * 900 + "!" + "A" * 200
     bad_padding = "A" * 1001
