@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal
@@ -19,6 +17,7 @@ from llmwitness.adapters import (
     envelope_to_otel_attributes,
 )
 from llmwitness.envelope import ExecutionEnvelope, sha256_ref
+from llmwitness.utils import atomic_write_text as _atomic_write
 from llmwitness.utils import canonical_json
 
 _RUN_ID = "12345678-1234-7123-8123-456789012345"
@@ -241,21 +240,6 @@ def render_adapter_conformance_markdown(report: AdapterConformanceReport) -> str
         )
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
-
-
-def _atomic_write(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        "w", encoding="utf-8", dir=path.parent, delete=False
-    ) as handle:
-        temporary = Path(handle.name)
-        handle.write(content)
-        handle.flush()
-        os.fsync(handle.fileno())
-    try:
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def write_adapter_conformance_reports(

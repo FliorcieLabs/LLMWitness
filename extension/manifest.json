@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "LLMWitness Local Development Sidecar",
   "version": "0.1.0",
-  "description": "Opt-in telemetry sidecar for localhost development",
+  "description": "Opt-in, per-site telemetry sidecar for localhost development",
   "permissions": [
     "storage",
     "activeTab"
@@ -16,9 +16,18 @@
   },
   "content_scripts": [
     {
-      "matches": ["http://localhost/*", "http://127.0.0.1/*"],
-      "js": ["content.js"],
+      "matches": [
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_start"
     }
-  ]
+  ],
+  "action": {
+    "default_title": "LLMWitness capture",
+    "default_popup": "popup.html"
+  }
 }

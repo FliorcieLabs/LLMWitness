@@ -4,7 +4,7 @@ include NOTICE
 include pyproject.toml
 include llmwitness.js
 
-recursive-include extension *.json *.js
+recursive-include extension *.json *.js *.html
 recursive-include benchmarks *.py *.md *.json
 recursive-include examples *.py *.md
 include schemas/execution-envelope-v0.1.schema.json

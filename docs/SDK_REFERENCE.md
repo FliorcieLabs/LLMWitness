@@ -18,6 +18,34 @@ sent only as a Bearer authorization header, and can be cleared by passing
 `null`. Browser delivery remains best-effort; `deliveryFailures` counts failed
 requests, including non-2xx responses.
 
+## Unreleased SDK additions
+
+`LLMWitnessTracker(...)` takes `max_retries` (default 2), `retry_backoff_sec`, `spool_dir`, `durable` (set `False` to keep nothing on disk), `capture_inputs` (set `False` to skip prompts) and `pricing`. A delivery that fails is retried; if it still fails the event is written to the spool and re-sent after the next successful delivery. Only the first failure of an outage is retried, so an outage does not slow the worker. Warnings go to the `llmwitness.sdk` logger, not to stdout. `tracker.stats()` returns the dropped, failed, spooled and replayed counts.
+
+`record_event(...)` also accepts `provider`, `model`, `latency_ms`, `input_messages` and `error`. Prompts are scrubbed and capped at about 100 KB, keeping the most recent messages.
+
+`wrap_openai_client(client)` and `wrap_anthropic_client(client)` record the model, prompt, latency, token counts, output and tool calls for sync and async clients, including `stream=True`. A stream is passed through unchanged and recorded once, when it ends. Anthropic's `messages.stream()` helper is not intercepted.
+
+`tracker.seal(correlation_id=None)` flushes the queue and seals the run, returning the service's response including `receipt_file`. `tracker.trace_session(name, auto_seal=True)` seals when the block exits; a failed seal is logged, not raised.
+
+```python
+from llmwitness.integrations import make_langchain_handler, witness
+
+@witness(tracker, "nightly-report", auto_seal=True)
+def run_report(): ...
+
+chain.invoke(inputs, config={"callbacks": [make_langchain_handler(tracker)]})
+```
+
+`@witness` records the task name, duration and any exception, not arguments or return values. `make_langchain_handler` needs `langchain-core` (`pip install "llmwitness[langchain]"`); its test runs against the installed library and is skipped when it is absent.
+
+For names and addresses, register your own detector; it runs after the built-in patterns:
+
+```python
+from llmwitness.utils import register_text_scrubber
+register_text_scrubber(lambda text: my_ner_redact(text))
+```
+
 `llmwitness verify RECEIPT --trusted-fingerprint SHA256_HEX` verifies the receipt signature and requires the embedded signing-key fingerprint to match a value obtained through a trusted channel. Without this option, signature verification proves only internal consistency with the key embedded in the receipt.
 
 ## Community end-to-end SDK

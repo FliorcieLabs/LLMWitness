@@ -76,7 +76,7 @@ def test_queue_overflow_drops_events_rather_than_blocking_the_caller(monkeypatch
     assert tracker.shutdown(timeout_sec=10) is True
 
 
-def test_delivery_failures_are_counted_and_never_raised(monkeypatch, capsys):
+def test_delivery_failures_are_counted_and_never_raised(monkeypatch, caplog):
     tracker = LLMWitnessTracker(ingestion_url="http://ingest.invalid")
 
     def failing_post(*args, **kwargs):
@@ -87,7 +87,7 @@ def test_delivery_failures_are_counted_and_never_raised(monkeypatch, capsys):
     assert tracker.shutdown(timeout_sec=10) is True
 
     assert tracker.delivery_failures == 1
-    assert "Failed to stream telemetry" in capsys.readouterr().out
+    assert "Failed to stream telemetry" in caplog.text
 
 
 def test_explicit_arguments_win_over_the_ambient_session(monkeypatch):
@@ -219,7 +219,7 @@ def test_wrapper_preserves_caller_supplied_extra_headers(monkeypatch):
 
 
 def test_wrapper_returns_the_response_even_when_metadata_cannot_be_parsed(
-    monkeypatch, capsys
+    monkeypatch, caplog
 ):
     tracker, delivered, _ = _recording_tracker(monkeypatch)
 
@@ -234,7 +234,7 @@ def test_wrapper_returns_the_response_even_when_metadata_cannot_be_parsed(
 
     tracker.shutdown()
     assert delivered == []
-    assert "Failed to parse OpenAI completion metadata" in capsys.readouterr().out
+    assert "Failed to parse OpenAI completion metadata" in caplog.text
 
 
 def test_wrapper_tolerates_responses_without_usage_or_choices(monkeypatch):
