@@ -64,7 +64,7 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          pip install -e . pytest coverage
+          pip install -e . pytest coverage hypothesis
 
       - name: Run Test Suite
         if: matrix.os != 'ubuntu-latest' || matrix.python-version != '3.11'
