@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import json
-import os
 import re
-import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal
@@ -18,6 +16,8 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+from llmwitness.utils import atomic_write_text as _atomic_write
 
 MAX_INTAKE_MANIFEST_BYTES = 256 * 1024
 _SAFE_IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9._-]{1,126}[a-z0-9]$")
@@ -299,21 +299,6 @@ def render_bench_dataset_intake_markdown(report: BenchDatasetIntakeReport) -> st
         else ("- No structural or declared-policy findings.",)
     )
     return "\n".join(lines) + "\n"
-
-
-def _atomic_write(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        "w", encoding="utf-8", dir=path.parent, delete=False
-    ) as handle:
-        temporary = Path(handle.name)
-        handle.write(content)
-        handle.flush()
-        os.fsync(handle.fileno())
-    try:
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def write_bench_dataset_intake_reports(

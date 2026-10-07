@@ -4,7 +4,14 @@
 2. Enable Developer mode.
 3. Load the `extension/` folder as an unpacked extension.
 4. Start the local ingestion service and gateway.
-5. Use the browser-side telemetry bridge for local development only.
+5. Open the localhost page you want to record, click the extension's toolbar
+   icon and choose **Record this site**.
+6. Use the browser-side telemetry bridge for local development only.
+
+Nothing is captured on a site until you allow it. While a page is being
+recorded it shows a red "LLMWitness is recording this page" notice in the
+bottom-right corner. Choose **Stop recording this site** in the popup, or
+remove the site from the list, to stop; this takes effect without a reload.
 
 The extension is optional and intended for local inspection of agent sessions.
 

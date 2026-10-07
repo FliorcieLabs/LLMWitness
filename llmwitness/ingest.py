@@ -3,10 +3,12 @@
 import datetime
 import hmac
 import json
+import logging
 import os
 import tempfile
 import time
-import uuid
+from collections import deque
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -16,26 +18,116 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from llmwitness.config import get_secret_key
+from llmwitness.config import get_secret_key, use_local_secret
+from llmwitness.keys import load_or_create_identity
+from llmwitness.session_store import SessionStore
+from llmwitness.spool import is_disabled
 from llmwitness.utils import (
+    CHAINED_RECEIPT_VERSION,
     Ed25519KeyManager,
     canonical_json,
     compute_hmac_signature,
+    normalize_uuidv7,
+    receipt_hash,
     redact_payload,
 )
+
+logger = logging.getLogger("llmwitness.ingest")
 
 RECEIPT_DIR = Path(os.getenv("LLMWITNESS_RECEIPT_DIR", ".llmwitness/receipts"))
 MAX_SESSIONS = int(os.getenv("LLMWITNESS_MAX_SESSIONS", "256"))
 MAX_EVENTS_PER_STREAM = int(os.getenv("LLMWITNESS_MAX_EVENTS_PER_STREAM", "1000"))
 MAX_EVENT_BYTES = int(os.getenv("LLMWITNESS_MAX_EVENT_BYTES", "262144"))
 INGEST_TOKEN = os.getenv("LLMWITNESS_INGEST_TOKEN")
+# An unsealed session with no new events for this long may be dropped, but only
+# when the session limit is reached and no sealed session can be evicted.
+SESSION_IDLE_TTL_SECONDS = float(
+    os.getenv("LLMWITNESS_SESSION_IDLE_TTL_SECONDS", str(24 * 60 * 60))
+)
 
 key_manager = Ed25519KeyManager()
+session_store: SessionStore | None = None
+
+audit_vault: dict[str, dict[str, Any]] = {}
+sealed_proofs: dict[str, dict[str, Any]] = {}
+# Sealed sessions dropped from memory to make room; their receipts stay on disk.
+_evicted_sealed_ids: deque[str] = deque(maxlen=4096)
+# Last receipt in each receipt directory's hash chain: (index, receipt hash).
+_chain_heads: dict[str, tuple[int, str] | None] = {}
+
+
+def _env_flag(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def enable_durable_state(
+    session_db: str | Path | None = None,
+    key_dir: str | Path | None = None,
+) -> None:
+    """Persist the signing identity and unsealed sessions across restarts.
+
+    Called when the service starts. An Ed25519 key or HMAC secret supplied
+    through the environment still takes precedence over the persisted files.
+    """
+    global key_manager, session_store
+    if not _env_flag("LLMWITNESS_EPHEMERAL_KEYS"):
+        identity = load_or_create_identity(key_dir)
+        if not os.getenv("LLMWITNESS_PRIVATE_KEY_PEM"):
+            key_manager = identity.key_manager
+        use_local_secret(identity.hmac_secret)
+        if identity.created:
+            logger.info(
+                "Created local signing key in %s (fingerprint %s)",
+                identity.directory,
+                identity.fingerprint,
+            )
+
+    configured = (
+        str(session_db)
+        if session_db is not None
+        else os.getenv("LLMWITNESS_SESSION_DB", ".llmwitness/sessions.db")
+    )
+    if is_disabled(configured):
+        return
+    session_store = SessionStore(configured)
+    restored = 0
+    stale_before = time.time() - SESSION_IDLE_TTL_SECONDS
+    for correlation_id, session in session_store.load_sessions().items():
+        if (RECEIPT_DIR / f"{correlation_id}.json").exists():
+            # Sealed just before the previous shutdown; the receipt is the record.
+            session_store.delete_session(correlation_id)
+            continue
+        if session["updated_at"] < stale_before:
+            # Abandoned runs must not fill the session limit across restarts.
+            session_store.delete_session(correlation_id)
+            continue
+        audit_vault.setdefault(correlation_id, session)
+        restored += 1
+    if restored:
+        logger.info("Restored %d unsealed session(s) from %s", restored, configured)
+
+
+def disable_durable_state() -> None:
+    global session_store
+    if session_store is not None:
+        session_store.close()
+        session_store = None
+
+
+@asynccontextmanager
+async def _lifespan(_: FastAPI):
+    enable_durable_state()
+    try:
+        yield
+    finally:
+        disable_durable_state()
+
 
 app = FastAPI(
     title="LLMWitness Local Ingestion Service",
     description="Localhost telemetry collector with tamper-evident receipts",
     version="0.1.0",
+    lifespan=_lifespan,
 )
 
 
@@ -59,25 +151,76 @@ async def handle_invalid_payload(
     return JSONResponse(status_code=422, content={"detail": detail})
 
 
-@app.middleware("http")
-async def reject_oversized_requests(request: Request, call_next):
-    """Reject declared oversized bodies before Pydantic parses nested telemetry."""
-    content_length = request.headers.get("content-length")
-    if content_length:
-        try:
-            if int(content_length) > MAX_EVENT_BYTES:
-                return JSONResponse(
-                    status_code=413, content={"detail": "Request body too large"}
+class _BodyLimitMiddleware:
+    """Reject oversized bodies before Pydantic parses nested telemetry.
+
+    The declared ``Content-Length`` is checked first, then the bytes actually
+    received are counted, because a chunked request declares no length at all.
+    """
+
+    def __init__(self, wrapped_app):
+        self.app = wrapped_app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        declared = dict(scope.get("headers") or []).get(b"content-length")
+        if declared:
+            try:
+                oversized = int(declared) > MAX_EVENT_BYTES
+            except ValueError:
+                response = JSONResponse(
+                    status_code=400, content={"detail": "Invalid Content-Length"}
                 )
-        except ValueError:
-            return JSONResponse(
-                status_code=400, content={"detail": "Invalid Content-Length"}
-            )
-    return await call_next(request)
+                await response(scope, receive, send)
+                return
+            if oversized:
+                await self._too_large(scope, receive, send)
+                return
+        if scope.get("method") in {"GET", "HEAD", "OPTIONS"}:
+            await self.app(scope, receive, send)
+            return
+
+        chunks: list[bytes] = []
+        received = 0
+        more_body = True
+        while more_body:
+            message = await receive()
+            if message["type"] != "http.request":
+                return  # client went away before sending a complete body
+            chunk = message.get("body", b"")
+            received += len(chunk)
+            if received > MAX_EVENT_BYTES:
+                await self._too_large(scope, receive, send)
+                return
+            chunks.append(chunk)
+            more_body = message.get("more_body", False)
+
+        replayed = False
+
+        async def replay():
+            nonlocal replayed
+            if not replayed:
+                replayed = True
+                return {
+                    "type": "http.request",
+                    "body": b"".join(chunks),
+                    "more_body": False,
+                }
+            return await receive()
+
+        await self.app(scope, replay, send)
+
+    @staticmethod
+    async def _too_large(scope, receive, send) -> None:
+        response = JSONResponse(
+            status_code=413, content={"detail": "Request body too large"}
+        )
+        await response(scope, receive, send)
 
 
-audit_vault: dict[str, dict[str, Any]] = {}
-sealed_proofs: dict[str, dict[str, Any]] = {}
+app.add_middleware(_BodyLimitMiddleware)
 
 
 class _ReceiptAlreadyExistsError(Exception):
@@ -97,6 +240,12 @@ class SDKTelemetryPayload(BaseModel):
     completion_string: str | None = Field(default=None, max_length=100_000)
     tool_calls: list[dict[str, Any]] = Field(default_factory=list, max_length=100)
     agent_state: dict[str, Any] = Field(default_factory=_bounded_dict)
+    provider: str | None = Field(default=None, max_length=64)
+    model: str | None = Field(default=None, max_length=256)
+    latency_ms: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    input_messages: list[dict[str, Any]] = Field(default_factory=list, max_length=500)
+    estimated_cost_usd: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    error: str | None = Field(default=None, max_length=2000)
 
 
 class GatewayTelemetryPayload(BaseModel):
@@ -122,14 +271,11 @@ class ExtensionTelemetryPayload(BaseModel):
 
 def _validate_uuidv7(value: str) -> str:
     try:
-        parsed = uuid.UUID(value)
-    except (ValueError, AttributeError) as exc:
+        return normalize_uuidv7(value)
+    except ValueError as exc:
         raise HTTPException(
             status_code=400, detail="correlation_id must be a UUIDv7"
         ) from exc
-    if parsed.version != 7 or parsed.variant != uuid.RFC_4122:
-        raise HTTPException(status_code=400, detail="correlation_id must be a UUIDv7")
-    return str(parsed)
 
 
 def _authorize(request: Request, authorization: str | None) -> None:
@@ -152,17 +298,70 @@ def _authorize(request: Request, authorization: str | None) -> None:
 def get_or_create_session(correlation_id: str) -> dict[str, Any]:
     correlation_id = _validate_uuidv7(correlation_id)
     if correlation_id not in audit_vault:
+        if (
+            correlation_id in _evicted_sealed_ids
+            and (RECEIPT_DIR / f"{correlation_id}.json").exists()
+        ):
+            raise HTTPException(
+                status_code=409, detail="Local receipt has already been created"
+            )
+        if len(audit_vault) >= MAX_SESSIONS:
+            _evict_sealed_session() or _expire_idle_session()
         if len(audit_vault) >= MAX_SESSIONS:
             raise HTTPException(status_code=429, detail="Local session limit reached")
+        created_at = time.time()
         audit_vault[correlation_id] = {
             "correlation_id": correlation_id,
-            "created_at": time.time(),
+            "created_at": created_at,
+            "updated_at": created_at,
             "sdk_events": [],
             "gateway_events": [],
             "extension_events": [],
             "is_sealed": False,
         }
+        if session_store is not None:
+            session_store.create_session(correlation_id, created_at)
     return audit_vault[correlation_id]
+
+
+def _evict_sealed_session() -> bool:
+    """Drop the oldest sealed session from memory; its receipt file remains.
+
+    A sealed session is always preferred, because dropping an unsealed one
+    discards a run that has no receipt yet.
+    """
+    sealed = [session for session in audit_vault.values() if session["is_sealed"]]
+    if not sealed:
+        return False
+    oldest = min(sealed, key=lambda session: session["created_at"])
+    correlation_id = oldest["correlation_id"]
+    audit_vault.pop(correlation_id, None)
+    sealed_proofs.pop(correlation_id, None)
+    _evicted_sealed_ids.append(correlation_id)
+    return True
+
+
+def _expire_idle_session() -> bool:
+    """Drop the longest-idle unsealed session once it has passed the idle limit."""
+    if not audit_vault:
+        return False
+    idlest = min(
+        audit_vault.values(),
+        key=lambda session: session.get("updated_at", session["created_at"]),
+    )
+    idle_since = idlest.get("updated_at", idlest["created_at"])
+    if time.time() - idle_since < SESSION_IDLE_TTL_SECONDS:
+        return False
+    correlation_id = idlest["correlation_id"]
+    logger.warning(
+        "Dropping unsealed session %s after %.0f seconds without events",
+        correlation_id,
+        time.time() - idle_since,
+    )
+    audit_vault.pop(correlation_id, None)
+    if session_store is not None:
+        session_store.delete_session(correlation_id)
+    return True
 
 
 def _append_event(session: dict[str, Any], stream: str, event: dict[str, Any]) -> int:
@@ -175,8 +374,39 @@ def _append_event(session: dict[str, Any], stream: str, event: dict[str, Any]) -
         raise HTTPException(status_code=429, detail="Local event limit reached")
     if len(canonical_json(event).encode("utf-8")) > MAX_EVENT_BYTES:
         raise HTTPException(status_code=413, detail="Telemetry event too large")
-    events.append(redact_payload(event))
+    redacted = redact_payload(event)
+    session["updated_at"] = time.time()
+    if session_store is not None:
+        session_store.append_event(
+            session["correlation_id"], stream, redacted, session["updated_at"]
+        )
+    events.append(redacted)
     return len(events)
+
+
+def _chain_head(receipt_dir: Path) -> tuple[int, str] | None:
+    """Find the newest chained receipt in a directory, scanning it once per process."""
+    key = str(receipt_dir)
+    if key not in _chain_heads:
+        head: tuple[int, str] | None = None
+        try:
+            candidates = sorted(receipt_dir.glob("*.json"))
+        except OSError:
+            candidates = []
+        for candidate in candidates:
+            try:
+                receipt = json.loads(candidate.read_text(encoding="utf-8"))
+                index = receipt["chain"]["index"]
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+            if (
+                receipt.get("receipt_version") == CHAINED_RECEIPT_VERSION
+                and isinstance(index, int)
+                and (head is None or index > head[0])
+            ):
+                head = (index, receipt_hash(receipt))
+        _chain_heads[key] = head
+    return _chain_heads[key]
 
 
 def _fsync_directory(directory: Path) -> None:
@@ -306,7 +536,9 @@ async def seal_session_audit(
         )
 
     sealed_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    signed_payload = {
+    head = _chain_head(RECEIPT_DIR)
+    chain_index = 0 if head is None else head[0] + 1
+    signed_payload: dict[str, Any] = {
         "correlation_id": correlation_id,
         "sealed_at": sealed_at,
         "events": {
@@ -314,11 +546,17 @@ async def seal_session_audit(
             "gateway": session["gateway_events"],
             "extension": session["extension_events"],
         },
+        "receipt_version": CHAINED_RECEIPT_VERSION,
+        # Linking each receipt to the one before it makes a removed or
+        # re-signed receipt detectable by `llmwitness verify-chain`.
+        "chain": {
+            "index": chain_index,
+            "previous_receipt_hash": None if head is None else head[1],
+        },
     }
     serialized = canonical_json(signed_payload)
     receipt = {
         **signed_payload,
-        "receipt_version": 1,
         "signature_algorithm": "Ed25519",
         "ed25519_signature": key_manager.sign(serialized),
         "public_key_pem": key_manager.export_public_key_pem(),
@@ -345,16 +583,47 @@ async def seal_session_audit(
             status_code=507, detail="Receipt could not be persisted"
         ) from exc
 
+    _chain_heads[str(RECEIPT_DIR)] = (
+        chain_index,
+        receipt_hash(receipt),
+    )
     session["is_sealed"] = True
     session["sealed_at"] = sealed_at
     sealed_proofs[correlation_id] = receipt
+    if session_store is not None:
+        session_store.delete_session(correlation_id)
     return {
         "status": "receipt_created",
         "correlation_id": correlation_id,
         "hmac_signature": receipt["hmac_signature"],
         "ed25519_signature": receipt["ed25519_signature"],
         "public_key_fingerprint": receipt["public_key_fingerprint"],
+        "chain_index": chain_index,
         "receipt_file": str(receipt_path),
+    }
+
+
+@app.get("/ingest/sessions")
+async def list_sessions(
+    request: Request,
+    authorization: str | None = Header(default=None),
+):
+    """Summarise the sessions currently held in memory."""
+    _authorize(request, authorization)
+    return {
+        "sessions": [
+            {
+                "correlation_id": session["correlation_id"],
+                "created_at": session["created_at"],
+                "is_sealed": session["is_sealed"],
+                "sdk_events": len(session["sdk_events"]),
+                "gateway_events": len(session["gateway_events"]),
+                "extension_events": len(session["extension_events"]),
+            }
+            for session in audit_vault.values()
+        ],
+        "limit": MAX_SESSIONS,
+        "durable": session_store is not None,
     }
 
 
@@ -377,6 +646,8 @@ async def health_check():
         "status": "healthy",
         "service": "LLMWitness local ingestion",
         "timestamp": time.time(),
+        "sessions": len(audit_vault),
+        "durable_sessions": session_store is not None,
     }
 
 

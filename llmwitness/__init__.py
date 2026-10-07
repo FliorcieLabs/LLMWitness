@@ -16,6 +16,9 @@ from llmwitness.utils import (
     generate_uuidv7,
     redact_payload,
     redact_pii,
+    register_scrub_pattern,
+    register_sensitive_field,
+    register_text_scrubber,
     verify_proof_receipt,
 )
 
@@ -27,6 +30,9 @@ __all__ = [
     "trace_session",
     "redact_pii",
     "redact_payload",
+    "register_scrub_pattern",
+    "register_sensitive_field",
+    "register_text_scrubber",
     "generate_uuidv7",
     "verify_proof_receipt",
     "Ed25519KeyManager",

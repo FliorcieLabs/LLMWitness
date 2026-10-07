@@ -4,7 +4,46 @@
 
 const INGESTION_ENDPOINT = "http://127.0.0.1:8000/ingest/extension";
 const INGEST_TOKEN_STORAGE_KEY = 'llmwitnessIngestToken';
+const ALLOWED_ORIGINS_STORAGE_KEY = 'llmwitnessAllowedOrigins';
 const UUIDV7_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function senderOrigin(sender) {
+  if (sender && typeof sender.origin === 'string' && sender.origin) return sender.origin;
+  try {
+    return new URL(sender.url).origin;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Capture is off for every site until the user allows it from the popup. The
+// worker re-checks the allow-list so a content script cannot bypass consent.
+function isOriginAllowed(sender) {
+  return new Promise((resolve) => {
+    if (!chrome.storage || !chrome.storage.local) {
+      // No persistent storage to hold a consent decision (non-extension host).
+      resolve(true);
+      return;
+    }
+    const origin = senderOrigin(sender);
+    if (!origin) {
+      resolve(false);
+      return;
+    }
+    try {
+      chrome.storage.local.get([ALLOWED_ORIGINS_STORAGE_KEY], (stored) => {
+        if (chrome.runtime.lastError) {
+          resolve(false);
+          return;
+        }
+        const allowed = stored && stored[ALLOWED_ORIGINS_STORAGE_KEY];
+        resolve(Array.isArray(allowed) && allowed.includes(origin));
+      });
+    } catch (_) {
+      resolve(false);
+    }
+  });
+}
 
 function buildIngestionHeaders() {
   return new Promise((resolve, reject) => {
@@ -40,6 +79,11 @@ function buildIngestionHeaders() {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message && message.action === 'LLMWITNESS_CONSENT_QUERY') {
+    isOriginAllowed(sender).then(allowed => sendResponse({ allowed: allowed }));
+    return true;
+  }
+
   if (message && message.action === 'LLMWITNESS_DOM_TELEMETRY') {
     const payload = message.payload;
 
@@ -48,7 +92,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return false;
     }
 
-    buildIngestionHeaders()
+    isOriginAllowed(sender)
+    .then(allowed => {
+      if (!allowed) throw new Error('capture is not allowed for this site');
+      return buildIngestionHeaders();
+    })
     .then(headers => fetch(INGESTION_ENDPOINT, {
       method: 'POST',
       headers: headers,

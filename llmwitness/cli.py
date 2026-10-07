@@ -38,8 +38,72 @@ def _add_receipt_commands(subparsers: argparse._SubParsersAction) -> None:
     verify_parser.add_argument(
         "--trusted-fingerprint",
         default=None,
-        help="Require the receipt's Ed25519 public-key fingerprint to match this value",
+        help="Require the receipt's Ed25519 public-key fingerprint to match this value "
+        "(default: LLMWITNESS_TRUSTED_FINGERPRINT, then the local key from `llmwitness keygen`)",
     )
+    verify_parser.add_argument(
+        "--any-signer",
+        action="store_true",
+        help="Skip the signer check even when a trusted fingerprint is configured",
+    )
+
+
+def _add_local_tool_commands(subparsers: argparse._SubParsersAction) -> None:
+    keygen = subparsers.add_parser(
+        "keygen", help="Create a persistent local signing key and print its fingerprint"
+    )
+    keygen.add_argument("--key-dir", default=None)
+
+    serve = subparsers.add_parser(
+        "serve", help="Run the ingestion service and the gateway in one process"
+    )
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--ingest-port", type=int, default=8000)
+    serve.add_argument("--gateway-port", type=int, default=8011)
+    serve.add_argument("--no-gateway", action="store_true")
+
+    seal = subparsers.add_parser(
+        "seal", help="Seal one run into a signed local receipt"
+    )
+    seal.add_argument("correlation_id")
+    seal.add_argument("--ingestion-url", default=None)
+
+    listing = subparsers.add_parser("list", help="List local receipts, newest first")
+    listing.add_argument("--receipt-dir", default=None)
+    listing.add_argument("--json", action="store_true")
+
+    show = subparsers.add_parser("show", help="Show the timeline of one receipt")
+    show.add_argument("receipt", help="Receipt path or correlation ID")
+    show.add_argument("--receipt-dir", default=None)
+    show.add_argument("--html", default=None, help="Write a static HTML page instead")
+
+    diff = subparsers.add_parser("diff", help="Show where two runs diverged")
+    diff.add_argument("first", help="Receipt path or correlation ID")
+    diff.add_argument("second", help="Receipt path or correlation ID")
+    diff.add_argument("--receipt-dir", default=None)
+
+    chain = subparsers.add_parser(
+        "verify-chain", help="Check the hash chain across a receipt directory"
+    )
+    chain.add_argument("--receipt-dir", default=None)
+
+    otel = subparsers.add_parser(
+        "export-otel", help="Export one receipt as OpenTelemetry trace data (OTLP/JSON)"
+    )
+    otel.add_argument("receipt", help="Receipt path or correlation ID")
+    otel.add_argument("--receipt-dir", default=None)
+    otel.add_argument("--output", default=None, help="Write OTLP JSON to this file")
+    otel.add_argument(
+        "--endpoint", default=None, help="POST to this OTLP/HTTP collector"
+    )
+    otel.add_argument("--service-name", default="llmwitness")
+
+    stamp = subparsers.add_parser(
+        "timestamp", help="Request an RFC 3161 timestamp token for a receipt"
+    )
+    stamp.add_argument("receipt", help="Receipt path or correlation ID")
+    stamp.add_argument("--receipt-dir", default=None)
+    stamp.add_argument("--tsa-url", required=True, help="Time-stamping authority URL")
 
 
 def _add_envelope_commands(subparsers: argparse._SubParsersAction) -> None:
@@ -220,6 +284,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command")
     _add_receipt_commands(subparsers)
+    _add_local_tool_commands(subparsers)
     _add_envelope_commands(subparsers)
     _add_journal_commands(subparsers)
     _add_evidence_bundle_command(subparsers)
@@ -263,19 +328,240 @@ def _handle_verify_receipt(args: argparse.Namespace) -> None:
     if not isinstance(fingerprint, str) or not fingerprint:
         print("[FAIL] Receipt does not contain a public-key fingerprint.")
         raise SystemExit(1)
-    if (
-        args.trusted_fingerprint is not None
-        and fingerprint.lower() != args.trusted_fingerprint.lower()
-    ):
+    trusted, trust_source = _trusted_fingerprint(args)
+    if trusted is not None and fingerprint.lower() != trusted.lower():
         print("[FAIL] Receipt signer fingerprint does not match the trusted value.")
+        print(f"Trusted fingerprint ({trust_source}): {trusted}")
+        print(f"Receipt signer fingerprint: {fingerprint}")
         raise SystemExit(1)
     if secret:
         print("[OK] Ed25519 signature and HMAC verified.")
+    elif trusted is not None:
+        print(f"[OK] Ed25519 signature verified; signer matches {trust_source}.")
     else:
         print(
             "[OK] Ed25519 signature verified. Trust the signer only after checking its fingerprint."
         )
     print(f"Signer fingerprint: {fingerprint}")
+
+
+def _trusted_fingerprint(args: argparse.Namespace) -> tuple[str | None, str]:
+    """Pick the fingerprint a receipt's signer must match, and say where it came from."""
+    if args.trusted_fingerprint is not None:
+        return args.trusted_fingerprint, "--trusted-fingerprint"
+    if getattr(args, "any_signer", False):
+        return None, ""
+    from_env = os.getenv("LLMWITNESS_TRUSTED_FINGERPRINT")
+    if from_env:
+        return from_env, "LLMWITNESS_TRUSTED_FINGERPRINT"
+    from llmwitness.keys import local_trusted_fingerprint
+
+    local = local_trusted_fingerprint()
+    return (local, "the local signing key") if local else (None, "")
+
+
+def _handle_keygen(args: argparse.Namespace) -> None:
+    from llmwitness.keys import create_identity
+
+    try:
+        identity = create_identity(args.key_dir)
+    except FileExistsError as exc:
+        print(f"[ERROR] {exc}. Existing keys are never overwritten.")
+        raise SystemExit(1) from None
+    print(f"[OK] Created local signing key in {identity.directory}")
+    print(f"Signer fingerprint: {identity.fingerprint}")
+    print(
+        "Keep the private key file private: anyone who can read it can sign receipts."
+    )
+
+
+def _handle_serve(args: argparse.Namespace) -> None:
+    import asyncio
+
+    import uvicorn
+
+    from llmwitness import gateway, ingest
+
+    servers = [
+        uvicorn.Server(
+            uvicorn.Config(ingest.app, host=args.host, port=args.ingest_port)
+        )
+    ]
+    if not args.no_gateway:
+        if not os.getenv("INGESTION_SERVER_URL"):
+            gateway.INGESTION_SERVER_URL = f"http://{args.host}:{args.ingest_port}"
+        servers.append(
+            uvicorn.Server(
+                uvicorn.Config(gateway.app, host=args.host, port=args.gateway_port)
+            )
+        )
+
+    async def run() -> None:
+        tasks = [asyncio.ensure_future(server.serve()) for server in servers]
+        # When either service stops (Ctrl-C or a bind failure), stop the other.
+        await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for server in servers:
+            server.should_exit = True
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    asyncio.run(run())
+
+
+def _handle_seal(args: argparse.Namespace) -> None:
+    import httpx
+
+    base = (
+        args.ingestion_url
+        or os.getenv("INGESTION_SERVER_URL")
+        or "http://localhost:8000"
+    ).rstrip("/")
+    token = os.getenv("LLMWITNESS_INGEST_TOKEN")
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    try:
+        response = httpx.post(
+            f"{base}/ingest/seal",
+            json={"correlation_id": args.correlation_id},
+            headers=headers,
+            timeout=10.0,
+        )
+    except httpx.HTTPError as exc:
+        print(f"[ERROR] Could not reach the ingestion service at {base}: {exc}")
+        raise SystemExit(1) from None
+    if response.status_code != 200:
+        try:
+            detail = response.json().get("detail")
+        except ValueError:
+            detail = response.text
+        print(f"[FAIL] Seal refused (HTTP {response.status_code}): {detail}")
+        raise SystemExit(1)
+    result = response.json()
+    print(f"[OK] Receipt created: {result.get('receipt_file')}")
+    print(f"Signer fingerprint: {result.get('public_key_fingerprint')}")
+
+
+def _resolve_or_exit(reference: str, directory: str | None) -> Path:
+    from llmwitness.receipt_tools import resolve_receipt
+
+    try:
+        return resolve_receipt(reference, directory)
+    except FileNotFoundError as exc:
+        print(f"[ERROR] {exc}")
+        raise SystemExit(1) from None
+
+
+def _load_or_exit(path: Path) -> dict:
+    from llmwitness.receipt_tools import load_receipt
+
+    try:
+        return load_receipt(path)
+    except (OSError, ValueError) as exc:
+        print(f"[ERROR] {path} is not a readable receipt: {exc}")
+        raise SystemExit(1) from None
+
+
+def _handle_list(args: argparse.Namespace) -> None:
+    from llmwitness.receipt_tools import list_receipts, receipt_directory
+
+    summaries = list_receipts(args.receipt_dir)
+    if args.json:
+        print(json.dumps([item.to_dict() for item in summaries], indent=2))
+        return
+    if not summaries:
+        print(f"No receipts in {receipt_directory(args.receipt_dir)}")
+        return
+    for item in summaries:
+        events = item.sdk_events + item.gateway_events + item.extension_events
+        print(
+            f"{item.correlation_id}  {item.sealed_at[:19]}  {events:>4} events  "
+            f"{item.prompt_tokens + item.completion_tokens:>7} tokens  "
+            f"{'valid' if item.signature_valid else 'INVALID'}"
+        )
+
+
+def _handle_show(args: argparse.Namespace) -> None:
+    from llmwitness.receipt_tools import render_html, render_text
+
+    path = _resolve_or_exit(args.receipt, args.receipt_dir)
+    receipt = _load_or_exit(path)
+    if args.html:
+        Path(args.html).write_text(render_html(path, receipt), encoding="utf-8")
+        print(f"[OK] Wrote {args.html}")
+        return
+    print(render_text(path, receipt), end="")
+
+
+def _handle_diff(args: argparse.Namespace) -> None:
+    from llmwitness.receipt_tools import diff_receipts
+
+    first = _load_or_exit(_resolve_or_exit(args.first, args.receipt_dir))
+    second = _load_or_exit(_resolve_or_exit(args.second, args.receipt_dir))
+    differences = diff_receipts(first, second)
+    if not differences:
+        print("No differences in events, tokens, tools or outputs.")
+        return
+    print("\n".join(differences))
+    raise SystemExit(1)
+
+
+def _handle_verify_chain(args: argparse.Namespace) -> None:
+    from llmwitness.receipt_tools import receipt_directory, verify_chain
+
+    report = verify_chain(args.receipt_dir)
+    print(
+        f"{report.chained} chained receipt(s), {report.unchained} older unchained "
+        f"receipt(s) in {receipt_directory(args.receipt_dir)}"
+    )
+    if len(report.signers) > 1:
+        print(f"[WARN] The chain was signed by {len(report.signers)} different keys.")
+    if not report.valid:
+        for problem in report.problems:
+            print(f"[FAIL] {problem}")
+        raise SystemExit(1)
+    print("[OK] Receipt chain is unbroken.")
+
+
+def _handle_export_otel(args: argparse.Namespace) -> None:
+    import httpx
+
+    from llmwitness.otel_export import post_otlp, receipt_to_otlp
+
+    receipt = _load_or_exit(_resolve_or_exit(args.receipt, args.receipt_dir))
+    try:
+        payload = receipt_to_otlp(receipt, service_name=args.service_name)
+    except ValueError as exc:
+        print(f"[ERROR] Receipt cannot be exported: {exc}")
+        raise SystemExit(1) from None
+    if args.output:
+        Path(args.output).write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        print(f"[OK] Wrote {args.output}")
+    if args.endpoint:
+        try:
+            post_otlp(args.endpoint, payload)
+        except httpx.HTTPError as exc:
+            print(f"[ERROR] Collector did not accept the trace: {exc}")
+            raise SystemExit(1) from None
+        print(f"[OK] Sent trace to {args.endpoint}")
+    if not args.output and not args.endpoint:
+        print(json.dumps(payload, indent=2))
+
+
+def _handle_timestamp(args: argparse.Namespace) -> None:
+    import httpx
+
+    from llmwitness.timestamping import request_timestamp
+
+    path = _resolve_or_exit(args.receipt, args.receipt_dir)
+    try:
+        token_path, digest = request_timestamp(path, args.tsa_url)
+    except (OSError, ValueError, httpx.HTTPError) as exc:
+        print(f"[ERROR] Timestamp request failed: {exc}")
+        raise SystemExit(1) from None
+    print(f"[OK] Timestamp token saved: {token_path}")
+    print(f"Stamped SHA-256 digest: {digest}")
+    print(
+        "The token's signature was not checked here. Verify it with:\n"
+        f"  openssl ts -verify -digest {digest} -in {token_path} -CAfile <tsa-ca.pem>"
+    )
 
 
 def _handle_schema(args: argparse.Namespace) -> None:
@@ -679,6 +965,15 @@ def _handle_mcp(_: argparse.Namespace) -> None:
 COMMAND_HANDLERS: dict[str, CommandHandler] = {
     "validate-config": _handle_validate_config,
     "verify": _handle_verify_receipt,
+    "keygen": _handle_keygen,
+    "serve": _handle_serve,
+    "seal": _handle_seal,
+    "list": _handle_list,
+    "show": _handle_show,
+    "diff": _handle_diff,
+    "verify-chain": _handle_verify_chain,
+    "export-otel": _handle_export_otel,
+    "timestamp": _handle_timestamp,
     "schema": _handle_schema,
     "validate-envelope": _handle_validate_envelope,
     "verify-journal": _handle_journal,

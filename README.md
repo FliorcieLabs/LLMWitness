@@ -18,7 +18,22 @@ The demonstration uses synthetic data. It verifies an untouched local receipt, c
 - Browser SDK and opt-in Manifest V3 extension.
 - `llmwitness verify` and `llmwitness validate-config` commands.
 
-The gateway returns the upstream response body to the application without applying audit redaction to that response. Streaming, broad OpenAI compatibility, Anthropic compatibility, multi-tenancy, durable delivery, and distributed operation are not currently claimed.
+The gateway returns the upstream response body to the application without applying audit redaction to that response. Broad OpenAI or Anthropic API compatibility, multi-tenancy, guaranteed delivery, and distributed operation are not claimed.
+
+## Unreleased local durability and tooling
+
+These changes are on the development branch and are not part of `0.1.0`.
+
+- **Sessions survive a restart:** the ingestion service mirrors unsealed sessions to a local SQLite file (`LLMWITNESS_SESSION_DB`, default `.llmwitness/sessions.db`; `off` disables it). At the session limit the oldest sealed session is dropped from memory first; an unsealed session is dropped only after 24 hours without events (`LLMWITNESS_SESSION_IDLE_TTL_SECONDS`).
+- **Persistent signer:** the service creates a signing key and HMAC secret in `.llmwitness/keys` on first start, or run `llmwitness keygen`. `llmwitness verify` then requires a receipt's signer to match that key (or `LLMWITNESS_TRUSTED_FINGERPRINT`) unless `--any-signer` is given. The key file is an ordinary file: anyone who can read it can sign.
+- **Receipt chain:** each receipt signs a link to the previous one; `llmwitness verify-chain` reports a removed or re-signed receipt. This is local tamper evidence, not immutability.
+- **Delivery retry and spool:** the SDK and gateway retry a failed submission, then write it to `.llmwitness/spool` (`LLMWITNESS_SPOOL_DIR`, `off` disables it) and re-send it later. Delivery remains best-effort and at-least-once; events are still dropped when the SDK queue is full.
+- **Scrubbing:** card numbers must pass the Luhn check, email addresses and formatted phone numbers are redacted, and `LLMWITNESS_SCRUB_RULES_FILE` adds your own patterns and field names. Names and addresses are not detected unless you register a scrubber for them.
+- **Gateway:** an Anthropic `POST /v1/messages` route, and server-sent-event pass-through for `"stream": true` on both routes. The audit copy of a stream holds the scrubbed assembled text, not the raw chunks.
+- **SDK capture:** model, prompt messages, latency and an optional cost estimate from prices you supply; sync, async and streaming OpenAI and Anthropic clients; `tracker.seal()` and `trace_session(..., auto_seal=True)`.
+- **Commands:** `llmwitness serve`, `seal`, `list`, `show` (terminal or `--html`), `diff`, `verify-chain`, `export-otel` and `timestamp`.
+- **Integrations:** a `@witness` decorator and a LangChain callback handler (`llmwitness.integrations`).
+- **Browser extension:** nothing is captured until you allow a site from the extension popup, and a visible notice stays on the page while it is recorded.
 
 ## Unreleased Community reliability workflow
 
@@ -148,6 +163,16 @@ tracker.shutdown()
 print(correlation_id, tracker.dropped_events, tracker.delivery_failures)
 ```
 
+On the development branch, `tracker.wrap_openai_client(client)` and
+`tracker.wrap_anthropic_client(client)` record each call's model, prompt,
+latency and output, and a run can seal itself:
+
+```python
+with tracker.trace_session("example", auto_seal=True):
+    client.chat.completions.create(model="...", messages=[...])
+print(tracker.last_receipt["receipt_file"], tracker.stats())
+```
+
 If `LLMWITNESS_INGEST_TOKEN` is configured on the ingestion service, the SDK and gateway read the same variable and authenticate their telemetry submissions. Browser components must receive the matching token explicitly; see the [browser extension setup](examples/browser_extension_setup.md). Without a token, ingestion is restricted to loopback development clients.
 
 ## Examples
@@ -164,6 +189,17 @@ curl -X POST http://127.0.0.1:8000/ingest/seal \
   -d '{"correlation_id":"YOUR_UUIDV7"}'
 
 llmwitness verify .llmwitness/receipts/YOUR_UUIDV7.json
+```
+
+On the development branch the same flow is:
+
+```bash
+llmwitness serve                       # ingestion on 8000, gateway on 8011
+llmwitness seal YOUR_UUIDV7
+llmwitness list
+llmwitness show YOUR_UUIDV7            # add --html run.html for a static page
+llmwitness verify .llmwitness/receipts/YOUR_UUIDV7.json
+llmwitness verify-chain
 ```
 
 Run deterministic mapping-level conformance for every supported framework

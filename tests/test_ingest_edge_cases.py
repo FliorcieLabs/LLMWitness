@@ -313,6 +313,7 @@ def test_an_empty_session_still_produces_a_verifiable_receipt(client, tmp_path):
     )
     assert receipt["events"]["sdk"] == []
     assert receipt["events"]["extension"] == []
-    assert receipt["receipt_version"] == 1
+    assert receipt["receipt_version"] == 2
+    assert receipt["chain"] == {"index": 0, "previous_receipt_hash": None}
     assert receipt["signature_algorithm"] == "Ed25519"
     assert sealed.json()["public_key_fingerprint"] == receipt["public_key_fingerprint"]

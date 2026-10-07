@@ -7,9 +7,7 @@ credential, calls a provider, approves an adapter, or changes Runtime state.
 from __future__ import annotations
 
 import json
-import os
 import re
-import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal
@@ -23,6 +21,8 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+from llmwitness.utils import atomic_write_text as _atomic_write
 
 MAX_DOSSIER_BYTES = 256 * 1024
 _ENVIRONMENT_NAME = re.compile(r"^[A-Z][A-Z0-9_]{2,127}$")
@@ -280,21 +280,6 @@ def render_provider_readiness_markdown(report: ProviderReadinessReport) -> str:
     else:
         lines.append("- No structural or declared-policy findings.")
     return "\n".join(lines) + "\n"
-
-
-def _atomic_write(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        "w", encoding="utf-8", dir=path.parent, delete=False
-    ) as handle:
-        temporary = Path(handle.name)
-        handle.write(content)
-        handle.flush()
-        os.fsync(handle.fileno())
-    try:
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def write_provider_readiness_reports(
