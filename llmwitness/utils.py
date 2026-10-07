@@ -5,6 +5,7 @@ import hmac
 import json
 import os
 import re
+import secrets
 import time
 import uuid
 from typing import Any
@@ -40,9 +41,14 @@ SENSITIVE_FIELD_REGEX = re.compile(
     r"password|passwd|secret|client[_-]?secret)$"
 )
 
-# Pattern for Data URL base64 image strings
+# Patterns for Data URL base64 image strings. The inline form stops at the first
+# whitespace so that prose following an embedded image is not swallowed; the
+# wrapped form tolerates line breaks and is only applied to a whole string.
 DATA_IMAGE_REGEX = re.compile(
-    r"data:image\/[a-zA-Z0-9\+\-\.]+;base64,([A-Za-z0-9+/=\s]+)"
+    r"data:image\/[a-zA-Z0-9\+\-\.]+;base64,([A-Za-z0-9+/=]+)"
+)
+DATA_IMAGE_WRAPPED_REGEX = re.compile(
+    r"data:image\/[a-zA-Z0-9\+\-\.]+;base64,([A-Za-z0-9+/=\r\n]+)"
 )
 
 
@@ -102,7 +108,9 @@ def redact_payload(
             for k, v in data.items()
         }
 
-    elif isinstance(data, list):
+    elif isinstance(data, (list, tuple, set, frozenset)):
+        # Normalised to a list because JSON has a single array form; an
+        # unhandled sequence type would otherwise reach the wire unredacted.
         return [
             redact_payload(item, allow_list=effective_allow, _depth=_depth + 1)
             for item in data
@@ -134,15 +142,16 @@ def redact_payload(
                 byte_count = len(b64_str)
             return f"[REDACTED_IMAGE_PAYLOAD_SIZE_{byte_count}_BYTES]"
 
+        whole_image = DATA_IMAGE_WRAPPED_REGEX.fullmatch(data)
+        if whole_image is not None:
+            try:
+                raw_bytes = base64.b64decode("".join(whole_image.group(1).split()))
+                return f"[REDACTED_IMAGE_PAYLOAD_SIZE_{len(raw_bytes)}_BYTES]"
+            except (ValueError, TypeError, binascii.Error):
+                # Whitespace here separates prose rather than wrapped base64, so
+                # fall through and redact only the contiguous payload below.
+                pass
         if DATA_IMAGE_REGEX.search(data):
-            m = DATA_IMAGE_REGEX.fullmatch(data)
-            if m is not None:
-                try:
-                    raw_bytes = base64.b64decode("".join(m.group(1).split()))
-                    byte_count = len(raw_bytes)
-                except Exception:
-                    byte_count = len(m.group(1))
-                return f"[REDACTED_IMAGE_PAYLOAD_SIZE_{byte_count}_BYTES]"
             data = DATA_IMAGE_REGEX.sub(replace_data_image, data)
 
         b64_byte_count = _is_raw_base64_image(data)
@@ -151,9 +160,12 @@ def redact_payload(
 
         placeholders = {}
         processed_text = data
+        # The nonce stops attacker-supplied text that already contains a
+        # placeholder token from being rewritten into an allow-listed term.
+        nonce = secrets.token_hex(8) if effective_allow else ""
         for idx, allowed_term in enumerate(effective_allow):
             if allowed_term in processed_text:
-                ph_token = f"__LLMWITNESS_ALLOW_PH_{idx}__"
+                ph_token = f"__LLMWITNESS_ALLOW_PH_{nonce}_{idx}__"
                 placeholders[ph_token] = allowed_term
                 processed_text = processed_text.replace(allowed_term, ph_token)
 
