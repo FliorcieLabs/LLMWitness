@@ -34,6 +34,19 @@ ROOT = Path(__file__).resolve().parents[1]
         "+1 23 " * 16_000,
         "sk-" * 30_000,
     ],
+    # Explicit ids: pytest exports the node id as PYTEST_CURRENT_TEST, and Windows
+    # rejects environment variables longer than 32767 characters.
+    ids=[
+        "dotted-labels",
+        "dotted-digits",
+        "at-then-dotted-labels",
+        "repeated-at",
+        "dotted-labels-then-domain",
+        "long-local-part",
+        "spaced-digits",
+        "phone-like",
+        "repeated-sk-prefix",
+    ],
 )
 def test_scrubbing_stays_fast_on_hostile_text(hostile):
     """Model output is untrusted: no pattern may backtrack quadratically on it."""
