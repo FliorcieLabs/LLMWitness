@@ -3,6 +3,7 @@ import os
 import queue
 import threading
 import time
+import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -25,10 +26,25 @@ def get_current_correlation_id() -> str | None:
     return _current_correlation_id.get()
 
 
+def _normalize_uuidv7(value: str) -> str:
+    """Validate and return the canonical text form of an RFC 9562 UUIDv7."""
+    try:
+        parsed = uuid.UUID(value)
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise ValueError("correlation_id must be an RFC 9562 UUIDv7") from exc
+    if parsed.version != 7 or parsed.variant != uuid.RFC_4122:
+        raise ValueError("correlation_id must be an RFC 9562 UUIDv7")
+    return str(parsed)
+
+
 @contextmanager
 def trace_session(task_name: str, correlation_id: str | None = None) -> Iterator[str]:
     """Bind a task and correlation ID without requiring a tracker instance."""
-    cid = correlation_id or generate_uuidv7()
+    cid = (
+        generate_uuidv7()
+        if correlation_id is None
+        else _normalize_uuidv7(correlation_id)
+    )
     token_cid = _current_correlation_id.set(cid)
     token_task = _current_task_name.set(task_name)
     try:
@@ -41,7 +57,8 @@ def trace_session(task_name: str, correlation_id: str | None = None) -> Iterator
 class LLMWitnessTracker:
     """
     Python SDK telemetry client for LLMWitness.
-    Captures model interactions, tool calls, and state variables using non-blocking background queue streaming.
+    Captures model interactions, tool calls, and state variables using a
+    non-blocking, best-effort background queue.
     """
 
     def __init__(
@@ -65,7 +82,7 @@ class LLMWitnessTracker:
         self._shutdown_lock = threading.Lock()
         self.http_client = httpx.Client(timeout=10.0)
 
-        # Start background worker thread for non-blocking telemetry streaming
+        # Start the background worker for best-effort telemetry delivery.
         self.worker_thread = threading.Thread(
             target=self._telemetry_worker, daemon=True, name="LLMWitnessTelemetryWorker"
         )
@@ -113,7 +130,9 @@ class LLMWitnessTracker:
         Pushes a telemetry payload into the background queue without blocking caller execution.
         """
         active_cid = (
-            correlation_id or _current_correlation_id.get() or generate_uuidv7()
+            _normalize_uuidv7(correlation_id)
+            if correlation_id is not None
+            else (_current_correlation_id.get() or generate_uuidv7())
         )
         active_task = task_name or _current_task_name.get() or "default_task"
 

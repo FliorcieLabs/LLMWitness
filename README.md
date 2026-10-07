@@ -20,25 +20,109 @@ The demonstration uses synthetic data. It verifies an untouched local receipt, c
 
 The gateway returns the upstream response body to the application without applying audit redaction to that response. Streaming, broad OpenAI compatibility, Anthropic compatibility, multi-tenancy, durable delivery, and distributed operation are not currently claimed.
 
+## Unreleased Community reliability workflow
+
+The development branch also contains an unreleased local reliability workflow: Execution Envelope v0.1, a SQLite/WAL hash-linked journal, persistent idempotency records, contracts and authority checks, Safe Effects, Saga-style compensation, internal state snapshots, guarded replay, dependency-isolated framework translators, side-effect-free project planning, local provider-adapter conformance fixtures, a deterministic reliability corpus with versioned baseline comparison, and a local STDIO MCP server. These are unreleased Community features, not capabilities of the published `0.1.0` package.
+
+The checked-in [Execution Envelope v0.1 schema](schemas/execution-envelope-v0.1.schema.json) is generated from the same strict runtime model exposed by `llmwitness schema`.
+
+For a local visual tour of the deterministic fault corpus, run:
+
+```bash
+python -m llmwitness.faultboard --output-dir .llmwitness/faultboard/my-run
+```
+
+Open the generated `faultboard.html` locally. It uses the same Reliability
+results as JSON, JUnit, and Markdown; it is an unreleased offline presentation
+tool, not an additional safety or production claim.
+
+Python applications can compose the full local Community reference path with
+`CommunitySDK`: project validation, authority/contracts/Safe Effects, journal
+verification, read-only recovery inspection, and deterministic Reliability
+reports. See the [SDK reference](docs/SDK_REFERENCE.md#community-end-to-end-sdk).
+
+A verified local journal run can be exported and checked without SQLite or a
+network connection:
+
+```bash
+llmwitness evidence-bundle export --journal .llmwitness/journal.db --run-id RUN_ID --output run.llmwitness-evidence.zip
+llmwitness evidence-bundle verify run.llmwitness-evidence.zip
+```
+
+The bundle omits referenced artifact bytes and source filesystem paths. A
+passing check establishes consistency of the recorded local bytes; it does not
+prove external truth or provide immutable or WORM storage.
+
+Before proposing a real provider adapter, maintainers can validate a
+metadata-only dossier without reading credentials or contacting the provider:
+
+```bash
+llmwitness provider-dossier provider-dossier.json --output-dir .llmwitness/provider-readiness
+```
+
+A passing dossier is only structurally ready for human review. It does not
+approve the adapter, validate supplied references, or replace provider-specific
+sandbox and conformance testing.
+
+The same fail-closed preparation pattern is available for future Agent Evidence
+Bench governance:
+
+```bash
+llmwitness bench-intake bench-intake.json --output-dir .llmwitness/bench-intake
+```
+
+This validates metadata and declared safeguards only. It does not read a
+dataset or holdout, admit data, run baselines/models, or replace data-owner and
+independent-reviewer acceptance.
+
+Maintainers can prepare—but never authorize—a release review with:
+
+```bash
+llmwitness release-readiness release.json --output-dir .llmwitness/release-readiness
+```
+
+The offline report checks declared repository, CI, account-control, publishing,
+artifact, SBOM/provenance, incident, and decision metadata. It does not verify
+external settings, create a tag/release, or publish a package.
+
 ## Community architecture
 
 ![LLMWitness Community architecture](docs/assets/launch/architecture.png)
 
 ## Install
 
-Install the published `0.1.0` package from PyPI:
+Install the current Community source in an isolated virtual environment. This
+keeps the CLI and the source checkout on the same version; the older registry
+artifact does not include the unreleased Runtime and Reliability modules.
 
 ```bash
-python -m pip install llmwitness==0.1.0
+git clone https://github.com/FliorcieLabs/LLMWitness.git
+cd LLMWitness
+python -m venv .venv
+source .venv/bin/activate                 # Linux/macOS
+# .venv\Scripts\Activate.ps1             # Windows PowerShell
+python -m pip install --upgrade pip
+python -m pip install .
+llmwitness --help
 ```
 
-To work from source instead:
+For contributors and local verification, install the development extras:
 
 ```bash
-git clone https://github.com/llmwitness/LLMWitness.git
-cd LLMWitness
 python -m pip install -e ".[dev]"
 ```
+
+For a laptop or VM without a source checkout, build a wheel on a trusted
+machine and copy the resulting file from `dist/`:
+
+```bash
+python -m build --wheel
+python -m pip install llmwitness-0.1.0-py3-none-any.whl
+```
+
+The wheel contains the complete Python Community package and its CLI; it does
+not require the repository working directory at runtime. Keep the generated
+`.llmwitness/` directory local to each installation.
 
 Start the local services in separate terminals:
 
@@ -64,7 +148,7 @@ tracker.shutdown()
 print(correlation_id, tracker.dropped_events, tracker.delivery_failures)
 ```
 
-If `LLMWITNESS_INGEST_TOKEN` is configured on the ingestion service, the SDK and gateway read the same variable and authenticate their telemetry submissions. Without a token, ingestion is restricted to loopback development clients.
+If `LLMWITNESS_INGEST_TOKEN` is configured on the ingestion service, the SDK and gateway read the same variable and authenticate their telemetry submissions. Browser components must receive the matching token explicitly; see the [browser extension setup](examples/browser_extension_setup.md). Without a token, ingestion is restricted to loopback development clients.
 
 ## Examples
 
@@ -81,6 +165,16 @@ curl -X POST http://127.0.0.1:8000/ingest/seal \
 
 llmwitness verify .llmwitness/receipts/YOUR_UUIDV7.json
 ```
+
+Run deterministic mapping-level conformance for every supported framework
+translator without installing the optional frameworks:
+
+```bash
+llmwitness adapter-conformance --output-dir .llmwitness/adapter-conformance
+```
+
+The result covers the normalized mapping boundary only. It does not certify a
+real framework SDK, native callback, framework version, or external deployment.
 
 Verification proves that the signed fields match the public key embedded in the receipt. It does **not** prove who controlled that key. Compare the displayed fingerprint with a trusted value when signer identity matters. Configure persistent key material before expecting verification across restarts; automatically generated keys are development-only.
 

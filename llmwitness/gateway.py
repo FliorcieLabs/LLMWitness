@@ -72,16 +72,22 @@ async def send_gateway_telemetry(payload: dict[str, Any]) -> None:
 
 
 def _audit_copy(response: httpx.Response) -> Any:
+    content = response.content
+    preview_limit = max(0, MAX_AUDIT_TEXT_BYTES)
+    preview_bytes = content[:preview_limit]
+    truncated = len(content) > len(preview_bytes)
     content_type = response.headers.get("content-type", "")
-    if "json" in content_type:
+    if "json" in content_type and not truncated:
         try:
             return redact_payload(response.json())
         except ValueError:
             pass
-    text = response.content[:MAX_AUDIT_TEXT_BYTES].decode("utf-8", errors="replace")
+    text = preview_bytes.decode("utf-8", errors="replace")
     return {
         "body_preview": redact_payload(text),
-        "truncated": len(response.content) > len(text.encode()),
+        "truncated": truncated,
+        "body_bytes": len(content),
+        "preview_bytes": len(preview_bytes),
     }
 
 

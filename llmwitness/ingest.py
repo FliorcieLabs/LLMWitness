@@ -4,6 +4,7 @@ import datetime
 import hmac
 import json
 import os
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -56,6 +57,10 @@ async def reject_oversized_requests(request: Request, call_next):
 
 audit_vault: dict[str, dict[str, Any]] = {}
 sealed_proofs: dict[str, dict[str, Any]] = {}
+
+
+class _ReceiptAlreadyExistsError(Exception):
+    """Raised when atomic publication finds an existing receipt path."""
 
 
 def _bounded_dict() -> dict[str, Any]:
@@ -153,6 +158,67 @@ def _append_event(session: dict[str, Any], stream: str, event: dict[str, Any]) -
     return len(events)
 
 
+def _fsync_directory(directory: Path) -> None:
+    """Best-effort sync of directory metadata on platforms that support it."""
+    if os.name == "nt":
+        return
+
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    try:
+        directory_fd = os.open(directory, flags)
+    except OSError:
+        return
+    try:
+        os.fsync(directory_fd)
+    except OSError:
+        pass
+    finally:
+        try:
+            os.close(directory_fd)
+        except OSError:
+            pass
+
+
+def _persist_receipt(receipt_path: Path, receipt: dict[str, Any]) -> None:
+    """Durably write and atomically publish a receipt without replacing one."""
+    temporary_path: Path | None = None
+    temporary_fd: int | None = None
+    try:
+        temporary_fd, temporary_name = tempfile.mkstemp(
+            dir=receipt_path.parent,
+            prefix=f".{receipt_path.name}.",
+            suffix=".tmp",
+        )
+        temporary_path = Path(temporary_name)
+        handle = os.fdopen(temporary_fd, "w", encoding="utf-8")
+        temporary_fd = None
+        with handle:
+            json.dump(receipt, handle, indent=2, ensure_ascii=False)
+            handle.flush()
+            os.fsync(handle.fileno())
+
+        # A hard-link publication is atomic and fails rather than replacing an
+        # existing receipt. The temporary file is on the same filesystem.
+        try:
+            os.link(temporary_path, receipt_path)
+        except FileExistsError as exc:
+            raise _ReceiptAlreadyExistsError from exc
+        _fsync_directory(receipt_path.parent)
+    finally:
+        if temporary_fd is not None:
+            try:
+                os.close(temporary_fd)
+            except OSError:
+                pass
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except OSError:
+                # Preserve the persistence error/status if cleanup itself fails.
+                pass
+            _fsync_directory(receipt_path.parent)
+
+
 @app.post("/ingest/sdk", status_code=201)
 async def ingest_sdk_telemetry(
     payload: SDKTelemetryPayload,
@@ -240,14 +306,11 @@ async def seal_session_audit(
         "limitations": "Local file receipt; tamper-evident, not immutable or WORM storage.",
     }
 
-    RECEIPT_DIR.mkdir(parents=True, exist_ok=True)
     receipt_path = RECEIPT_DIR / f"{correlation_id}.json"
     try:
-        with receipt_path.open("x", encoding="utf-8") as handle:
-            json.dump(receipt, handle, indent=2, ensure_ascii=False)
-            handle.flush()
-            os.fsync(handle.fileno())
-    except FileExistsError as exc:
+        RECEIPT_DIR.mkdir(parents=True, exist_ok=True)
+        _persist_receipt(receipt_path, receipt)
+    except _ReceiptAlreadyExistsError as exc:
         raise HTTPException(
             status_code=409, detail="Receipt file already exists"
         ) from exc

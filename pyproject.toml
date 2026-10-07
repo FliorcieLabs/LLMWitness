@@ -46,9 +46,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/llmwitness/LLMWitness"
-Repository = "https://github.com/llmwitness/LLMWitness.git"
-Issues = "https://github.com/llmwitness/LLMWitness/issues"
+Homepage = "https://github.com/FliorcieLabs/LLMWitness"
+Repository = "https://github.com/FliorcieLabs/LLMWitness.git"
+Issues = "https://github.com/FliorcieLabs/LLMWitness/issues"
 
 [project.scripts]
 llmwitness = "llmwitness.cli:main"

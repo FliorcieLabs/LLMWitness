@@ -53,3 +53,46 @@ def test_module_session_and_shutdown_drain_queue(monkeypatch):
     assert [item["correlation_id"] for item in delivered] == [cid]
     with pytest.raises(RuntimeError, match="shut down"):
         tracker.record_event()
+
+
+@pytest.mark.parametrize(
+    "invalid_correlation_id",
+    [
+        "",
+        "not-a-uuid",
+        str(uuid.uuid4()),
+        "019fd93b-a06b-7799-047f-67f80b9edc04",
+    ],
+)
+def test_sdk_rejects_non_uuidv7_caller_ids(invalid_correlation_id):
+    tracker = LLMWitnessTracker(ingestion_url="http://ingest.invalid")
+    try:
+        with pytest.raises(ValueError, match="RFC 9562 UUIDv7"):
+            with trace_session("invalid", invalid_correlation_id):
+                pass
+        with pytest.raises(ValueError, match="RFC 9562 UUIDv7"):
+            with tracker.trace_session("invalid", invalid_correlation_id):
+                pass
+        with pytest.raises(ValueError, match="RFC 9562 UUIDv7"):
+            tracker.record_event(correlation_id=invalid_correlation_id)
+        assert tracker.queue.empty()
+        assert get_current_correlation_id() is None
+    finally:
+        tracker.shutdown()
+
+
+def test_sdk_normalizes_valid_caller_uuidv7(monkeypatch):
+    correlation_id = "019fd93b-a06b-7799-947f-67f80b9edc04"
+    tracker = LLMWitnessTracker(ingestion_url="http://ingest.invalid")
+    monkeypatch.setattr(
+        tracker.http_client, "post", lambda *args, **kwargs: _Response()
+    )
+    try:
+        with trace_session("normalized", correlation_id.upper()) as normalized:
+            assert normalized == correlation_id
+        assert (
+            tracker.record_event(correlation_id=correlation_id.upper())
+            == correlation_id
+        )
+    finally:
+        tracker.shutdown()

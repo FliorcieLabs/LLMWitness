@@ -6,6 +6,55 @@
  */
 
 (function () {
+  const CORRELATION_HEADER = 'X-LLMWitness-Correlation-ID';
+  const CORRELATION_ATTRIBUTE = 'data-llmwitness-correlation-id';
+  const CORRELATION_EVENT = 'llmwitness:correlation-id';
+  const UUIDV7_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  function normalizeUUIDv7(value) {
+    if (typeof value !== 'string' || !UUIDV7_PATTERN.test(value)) {
+      throw new TypeError('correlationId must be an RFC 9562 UUIDv7');
+    }
+    return value.toLowerCase();
+  }
+
+  function readSharedCorrelationId() {
+    if (typeof window === 'undefined') return null;
+
+    let storedId = null;
+    try {
+      storedId = window.sessionStorage.getItem(CORRELATION_HEADER);
+    } catch (_) {}
+
+    const rootId =
+      typeof document !== 'undefined' && document.documentElement
+        ? document.documentElement.getAttribute(CORRELATION_ATTRIBUTE)
+        : null;
+    const candidate = [rootId, storedId, window.__LLMWITNESS_CORRELATION_ID__].find(
+      (value) => typeof value === 'string' && UUIDV7_PATTERN.test(value)
+    );
+    return candidate ? candidate.toLowerCase() : null;
+  }
+
+  function publishCorrelationId(cid) {
+    if (typeof window === 'undefined') return;
+    try {
+      window.__LLMWITNESS_CORRELATION_ID__ = cid;
+    } catch (_) {}
+    try {
+      window.sessionStorage.setItem(CORRELATION_HEADER, cid);
+    } catch (_) {}
+    if (typeof document === 'undefined') return;
+    if (document.documentElement) {
+      document.documentElement.setAttribute(CORRELATION_ATTRIBUTE, cid);
+    }
+    if (typeof CustomEvent === 'function') {
+      document.dispatchEvent(
+        new CustomEvent(CORRELATION_EVENT, { detail: { correlation_id: cid } })
+      );
+    }
+  }
+
   /**
    * Generates an RFC 9562 compliant UUIDv7 identifier in JavaScript.
    */
@@ -38,11 +87,18 @@
   class LLMWitnessBridge {
     constructor(options = {}) {
       this.ingestionUrl = (options.ingestionUrl || 'http://localhost:8000').replace(/\/$/, '');
-      this.correlationId = options.correlationId || generateUUIDv7();
+      this.correlationId = Object.prototype.hasOwnProperty.call(options, 'correlationId')
+        ? normalizeUUIDv7(options.correlationId)
+        : readSharedCorrelationId() || generateUUIDv7();
+      this.ingestToken = null;
+      if (Object.prototype.hasOwnProperty.call(options, 'ingestToken')) {
+        this.setIngestToken(options.ingestToken);
+      }
       this.debounceMs = options.debounceMs || 100;
       this.maxQueueSize = options.maxQueueSize || 1000;
       this.queue = [];
       this.droppedEvents = 0;
+      this.deliveryFailures = 0;
       this.timer = null;
       this.initialized = false;
       this.origFetch = null;
@@ -53,9 +109,15 @@
      */
     init(options = {}) {
       if (options.ingestionUrl) this.ingestionUrl = options.ingestionUrl.replace(/\/$/, '');
-      if (options.correlationId) this.correlationId = options.correlationId;
+      if (Object.prototype.hasOwnProperty.call(options, 'correlationId')) {
+        this.setCorrelationId(options.correlationId);
+      }
+      if (Object.prototype.hasOwnProperty.call(options, 'ingestToken')) {
+        this.setIngestToken(options.ingestToken);
+      }
       if (options.debounceMs) this.debounceMs = options.debounceMs;
 
+      publishCorrelationId(this.correlationId);
       if (this.initialized) return this;
       this.initialized = true;
 
@@ -65,11 +127,30 @@
     }
 
     setCorrelationId(cid) {
-      this.correlationId = cid;
+      this.correlationId = normalizeUUIDv7(cid);
+      publishCorrelationId(this.correlationId);
+      return this;
     }
 
     getCorrelationId() {
       return this.correlationId;
+    }
+
+    /**
+     * Configure an in-memory localhost ingestion token. The token is used only
+     * for the Authorization header and is never added to telemetry payloads.
+     * Passing null clears it.
+     */
+    setIngestToken(token) {
+      if (token === null || typeof token === 'undefined') {
+        this.ingestToken = null;
+        return this;
+      }
+      if (typeof token !== 'string' || token.length === 0 || /[\r\n]/.test(token)) {
+        throw new TypeError('ingestToken must be a non-empty single-line string or null');
+      }
+      this.ingestToken = token;
+      return this;
     }
 
     enqueue(event) {
@@ -78,13 +159,13 @@
         return false;
       }
       const payload = {
+        ...event,
         correlation_id: this.correlationId,
         timestamp: Date.now() / 1000,
         url:
           typeof window !== 'undefined'
             ? `${window.location.origin}${window.location.pathname}`
             : 'http://node.local',
-        ...event,
       };
       this.queue.push(payload);
       this.scheduleFlush();
@@ -106,14 +187,24 @@
           const endpoint = `${this.ingestionUrl}/ingest/extension`;
           const rawFetch =
             this.origFetch || (typeof fetch === 'function' ? fetch.bind(globalThis) : null);
-          if (rawFetch) {
-            await rawFetch(endpoint, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(item),
-            });
+          if (!rawFetch) {
+            throw new Error('fetch is unavailable for ingestion delivery');
+          }
+          const headers = { 'Content-Type': 'application/json' };
+          if (this.ingestToken !== null) {
+            headers.Authorization = `Bearer ${this.ingestToken}`;
+          }
+          const response = await rawFetch(endpoint, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(item),
+          });
+          if (!response || !response.ok) {
+            const status = response && response.status ? response.status : 'unknown';
+            throw new Error(`ingestion returned HTTP ${status}`);
           }
         } catch (err) {
+          this.deliveryFailures += 1;
           // Silent warning to prevent disrupting host application flow
           if (typeof console !== 'undefined' && console.warn) {
             console.warn('[LLMWitness Bridge Warning] Ingestion streaming error:', err);
@@ -147,8 +238,15 @@
           headers = new Headers(init.headers || inheritedHeaders || {});
         }
 
-        if (!headers.has('X-LLMWitness-Correlation-ID')) {
-          headers.set('X-LLMWitness-Correlation-ID', self.correlationId);
+        if (headers.has(CORRELATION_HEADER)) {
+          const suppliedCorrelationId = headers.get(CORRELATION_HEADER);
+          if (typeof suppliedCorrelationId === 'string' && UUIDV7_PATTERN.test(suppliedCorrelationId)) {
+            self.setCorrelationId(suppliedCorrelationId);
+          } else {
+            headers.set(CORRELATION_HEADER, self.correlationId);
+          }
+        } else {
+          headers.set(CORRELATION_HEADER, self.correlationId);
         }
         init.headers = headers;
 
@@ -161,7 +259,17 @@
           },
         });
 
-        return self.origFetch.call(this, input, init);
+        const response = await self.origFetch.call(this, input, init);
+        if (response && response.headers && typeof response.headers.get === 'function') {
+          const responseCorrelationId = response.headers.get(CORRELATION_HEADER);
+          if (
+            typeof responseCorrelationId === 'string' &&
+            UUIDV7_PATTERN.test(responseCorrelationId)
+          ) {
+            self.setCorrelationId(responseCorrelationId);
+          }
+        }
+        return response;
       };
     }
 
@@ -225,6 +333,10 @@
   }
 
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { LLMWitness: defaultBridge, LLMWitnessBridge, generateUUIDv7 };
+    module.exports = {
+      LLMWitness: defaultBridge,
+      LLMWitnessBridge,
+      generateUUIDv7,
+    };
   }
 })();
