@@ -5,6 +5,7 @@ import hmac
 import json
 import logging
 import os
+import sqlite3
 import tempfile
 import time
 from collections import deque
@@ -298,10 +299,9 @@ def _authorize(request: Request, authorization: str | None) -> None:
 def get_or_create_session(correlation_id: str) -> dict[str, Any]:
     correlation_id = _validate_uuidv7(correlation_id)
     if correlation_id not in audit_vault:
-        if (
-            correlation_id in _evicted_sealed_ids
-            and (RECEIPT_DIR / f"{correlation_id}.json").exists()
-        ):
+        # The persisted receipt remains the seal boundary after process restart
+        # and after the bounded eviction cache forgets a session.
+        if (RECEIPT_DIR / f"{correlation_id}.json").exists():
             raise HTTPException(
                 status_code=409, detail="Local receipt has already been created"
             )
@@ -310,7 +310,7 @@ def get_or_create_session(correlation_id: str) -> dict[str, Any]:
         if len(audit_vault) >= MAX_SESSIONS:
             raise HTTPException(status_code=429, detail="Local session limit reached")
         created_at = time.time()
-        audit_vault[correlation_id] = {
+        session = {
             "correlation_id": correlation_id,
             "created_at": created_at,
             "updated_at": created_at,
@@ -320,7 +320,13 @@ def get_or_create_session(correlation_id: str) -> dict[str, Any]:
             "is_sealed": False,
         }
         if session_store is not None:
-            session_store.create_session(correlation_id, created_at)
+            try:
+                session_store.create_session(correlation_id, created_at)
+            except (sqlite3.Error, OSError) as exc:
+                raise HTTPException(
+                    status_code=507, detail="Session could not be persisted"
+                ) from exc
+        audit_vault[correlation_id] = session
     return audit_vault[correlation_id]
 
 
@@ -358,9 +364,14 @@ def _expire_idle_session() -> bool:
         correlation_id,
         time.time() - idle_since,
     )
-    audit_vault.pop(correlation_id, None)
     if session_store is not None:
-        session_store.delete_session(correlation_id)
+        try:
+            session_store.delete_session(correlation_id)
+        except (sqlite3.Error, OSError) as exc:
+            raise HTTPException(
+                status_code=507, detail="Idle session could not be removed"
+            ) from exc
+    audit_vault.pop(correlation_id, None)
     return True
 
 
@@ -375,11 +386,17 @@ def _append_event(session: dict[str, Any], stream: str, event: dict[str, Any]) -
     if len(canonical_json(event).encode("utf-8")) > MAX_EVENT_BYTES:
         raise HTTPException(status_code=413, detail="Telemetry event too large")
     redacted = redact_payload(event)
-    session["updated_at"] = time.time()
+    updated_at = time.time()
     if session_store is not None:
-        session_store.append_event(
-            session["correlation_id"], stream, redacted, session["updated_at"]
-        )
+        try:
+            session_store.append_event(
+                session["correlation_id"], stream, redacted, updated_at
+            )
+        except (sqlite3.Error, OSError) as exc:
+            raise HTTPException(
+                status_code=507, detail="Event could not be persisted"
+            ) from exc
+    session["updated_at"] = updated_at
     events.append(redacted)
     return len(events)
 
@@ -591,7 +608,14 @@ async def seal_session_audit(
     session["sealed_at"] = sealed_at
     sealed_proofs[correlation_id] = receipt
     if session_store is not None:
-        session_store.delete_session(correlation_id)
+        try:
+            session_store.delete_session(correlation_id)
+        except (sqlite3.Error, OSError):
+            # The receipt is already committed. Startup reconciles this orphan
+            # against the receipt file, so cleanup must not turn success into 500.
+            logger.warning(
+                "Receipt committed; session cleanup deferred for %s", correlation_id
+            )
     return {
         "status": "receipt_created",
         "correlation_id": correlation_id,
