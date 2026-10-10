@@ -428,5 +428,11 @@ def test_spool_adopts_a_claim_abandoned_by_a_dead_process(tmp_path):
     old = time.time() - 600
     os.utime(abandoned.path, (old, old))
     spool.append("sdk", {"n": 2})
-    assert sorted(payload["n"] for payload in spool.claim("sdk").payloads) == [1, 2]
+    first = spool.claim("sdk")
+    second = spool.claim("sdk")
+    assert first is not None and second is not None
+    assert sorted(payload["n"] for payload in [*first.payloads, *second.payloads]) == [
+        1,
+        2,
+    ]
     assert not abandoned.path.exists()

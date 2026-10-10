@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
+import tempfile
 import threading
 import time
 from dataclasses import dataclass, field
@@ -68,7 +70,16 @@ class EventSpool:
         self._lock = threading.Lock()
 
     def _main_path(self, stream: str) -> Path:
+        self._validate_stream(stream)
         return self.directory / f"{stream}.jsonl"
+
+    @staticmethod
+    def _validate_stream(stream: str) -> None:
+        if (
+            not isinstance(stream, str)
+            or re.fullmatch(r"[A-Za-z0-9_-]+", stream) is None
+        ):
+            raise ValueError("stream must be a nonempty filename identifier")
 
     def _size(self) -> int:
         try:
@@ -82,6 +93,7 @@ class EventSpool:
 
     def append(self, stream: str, payload: dict[str, Any]) -> bool:
         """Persist one event; returns False when it could not be kept."""
+        self._validate_stream(stream)
         line = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
         encoded = line.encode("utf-8")
         with self._lock:
@@ -95,7 +107,7 @@ class EventSpool:
                 # processes share a spool directory.
                 descriptor = os.open(
                     self._main_path(stream),
-                    os.O_WRONLY | os.O_CREAT | os.O_APPEND,
+                    os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_BINARY", 0),
                     0o600,
                 )
                 try:
@@ -115,6 +127,7 @@ class EventSpool:
         return any(self._stale_claims(stream))
 
     def _stale_claims(self, stream: str) -> list[Path]:
+        self._validate_stream(stream)
         cutoff = time.time() - _STALE_CLAIM_SECONDS
         try:
             return [
@@ -126,49 +139,81 @@ class EventSpool:
             return []
 
     def claim(self, stream: str) -> SpoolClaim | None:
-        """Atomically take everything pending for ``stream``."""
+        """Atomically take one pending batch, including abandoned replay work."""
         with self._lock:
             claim_path = self.directory / f"{stream}.{secrets.token_hex(6)}.draining"
-            sources = self._stale_claims(stream)
-            try:
-                os.replace(self._main_path(stream), claim_path)
-            except OSError:
-                if not sources:
-                    return None
-                # Adopt a claim left behind by a process that died mid-replay.
+            sources = [self._main_path(stream), *self._stale_claims(stream)]
+            for source in sources:
                 try:
-                    os.replace(sources.pop(0), claim_path)
-                except OSError:
-                    return None
-            claim = SpoolClaim(claim_path)
-            for source in [claim_path, *sources]:
-                try:
-                    text = source.read_text(encoding="utf-8")
+                    os.replace(source, claim_path)
                 except OSError:
                     continue
-                for line in text.splitlines():
-                    try:
-                        payload = json.loads(line)
-                    except ValueError:
-                        continue  # a torn or corrupt line cannot be replayed
-                    if isinstance(payload, dict):
-                        claim.payloads.append(payload)
-                if source != claim_path:
-                    # Fold the adopted file into this claim so nothing is replayed twice.
-                    try:
-                        with claim_path.open("a", encoding="utf-8") as handle:
-                            handle.write(text if text.endswith("\n") else text + "\n")
-                        source.unlink()
-                    except OSError:
-                        pass
+                break
+            else:
+                return None
+            try:
+                # Rename preserves mtime: refresh the lease so an old batch
+                # cannot immediately be adopted by another replay worker.
+                os.utime(claim_path, None)
+                content = claim_path.read_bytes()
+            except OSError:
+                # Leave the unread batch available for later lease recovery.
+                return None
+            claim = SpoolClaim(claim_path)
+            for line in content.splitlines():
+                try:
+                    payload = json.loads(line)
+                except ValueError:
+                    continue  # a torn or corrupt line cannot be replayed
+                if isinstance(payload, dict):
+                    claim.payloads.append(payload)
             return claim
 
     def release(
         self, stream: str, claim: SpoolClaim, remaining: list[dict[str, Any]]
     ) -> None:
-        """Finish a replay attempt, putting undelivered events back."""
-        for payload in remaining:
-            self.append(stream, payload)
+        """Retain undelivered events without consuming additional spool capacity.
+
+        Replace the owned batch atomically before relinquishing it. A failed
+        write preserves the original batch for lease recovery; this can cause
+        duplicate delivery, consistent with the spool's at-least-once contract.
+        """
+        self._validate_stream(stream)
+        if (
+            claim.path.parent.resolve() != self.directory.resolve()
+            or re.fullmatch(
+                rf"{re.escape(stream)}\.[0-9a-f]{{12}}\.draining", claim.path.name
+            )
+            is None
+        ):
+            raise ValueError("claim must belong to this spool stream")
+        if remaining:
+            temporary_path: Path | None = None
+            try:
+                descriptor, name = tempfile.mkstemp(dir=self.directory, suffix=".tmp")
+                temporary_path = Path(name)
+                with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as handle:
+                    for payload in remaining:
+                        handle.write(
+                            json.dumps(
+                                payload, ensure_ascii=False, separators=(",", ":")
+                            )
+                            + "\n"
+                        )
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                # Publish as reclaimable in the same atomic replacement.
+                os.utime(temporary_path, (0, 0))
+                os.replace(temporary_path, claim.path)
+            except OSError:
+                pass  # Preserve the original claim if replacement failed.
+            finally:
+                if temporary_path is not None:
+                    try:
+                        temporary_path.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+            return
         try:
             claim.path.unlink()
         except OSError:

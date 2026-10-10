@@ -71,7 +71,9 @@ class ReceiptSummary:
 
 
 def _events(receipt: dict[str, Any], stream: str) -> list[dict[str, Any]]:
-    events = (receipt.get("events") or {}).get(stream) or []
+    events = as_mapping(receipt.get("events")).get(stream)
+    if not isinstance(events, list):
+        return []
     return [event for event in events if isinstance(event, dict)]
 
 
@@ -209,13 +211,17 @@ def timeline(receipt: dict[str, Any]) -> list[TimelineEntry]:
                 (f"element: {event['element_id']}",) if event.get("element_id") else (),
             )
         )
-    entries.sort(key=lambda entry: entry.timestamp)
+    entries.sort(key=lambda entry: _epoch_seconds(entry.timestamp))
     return entries
 
 
+def _epoch_seconds(timestamp: float) -> float:
+    # Contemporary browser events use epoch milliseconds; Python uses seconds.
+    return timestamp / 1000 if timestamp > 1e11 else timestamp
+
+
 def _clock(timestamp: float) -> str:
-    # Browser events carry millisecond timestamps; SDK and gateway use seconds.
-    seconds = timestamp / 1000 if timestamp > 1e11 else timestamp
+    seconds = _epoch_seconds(timestamp)
     try:
         moment = datetime.datetime.fromtimestamp(seconds, datetime.timezone.utc)
     except (OverflowError, OSError, ValueError):
