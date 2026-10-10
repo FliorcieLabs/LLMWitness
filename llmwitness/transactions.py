@@ -34,7 +34,13 @@ class AgentTransaction:
     async def effect(
         self, adapter: EffectAdapter, request: Mapping[str, Any]
     ) -> EffectExecution:
-        execution = await self.runner.run(adapter, request, self.context)
+        if self.final_state != "open":
+            raise TransactionHalted(f"transaction is {self.final_state}")
+        try:
+            execution = await self.runner.run(adapter, request, self.context)
+        except Exception:
+            self.final_state = "manual_review"
+            raise
         if execution.state == EffectStatus.VERIFIED:
             self.completed.append((adapter, execution))
             return execution
@@ -45,11 +51,18 @@ class AgentTransaction:
 
     async def __aexit__(self, exc_type: object, exc: object, traceback: object) -> bool:
         if exc is None:
-            self.final_state = "verified"
+            if self.final_state == "open":
+                self.final_state = "verified"
             return False
         unresolved = False
         for adapter, execution in reversed(self.completed):
-            compensated = await self.runner.compensate(adapter, execution, self.context)
+            try:
+                compensated = await self.runner.compensate(
+                    adapter, execution, self.context
+                )
+            except Exception:
+                self.final_state = "manual_review"
+                raise
             unresolved = unresolved or compensated.state != EffectStatus.COMPENSATED
         self.final_state = (
             "manual_review"
