@@ -22,3 +22,16 @@ proof.json
 *.db
 *.log
 benchmark_results*.json
+
+# Private portfolio planning, agent configuration, and sibling products are
+# outside this public LLMWitness repository. Do not ignore .github workflows.
+/.fliorcie-labs/
+/.fliorcielabs/
+/.fliocie-labs/
+/.spec/
+/.specs/
+/.agents/
+/.codex/
+/strategy/
+/products/
+/WitnessID/
