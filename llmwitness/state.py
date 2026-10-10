@@ -72,7 +72,7 @@ class InMemoryStateAdapter:
         changes = {
             key: {"before": left.get(key), "after": right.get(key)}
             for key in sorted(keys)
-            if left.get(key) != right.get(key)
+            if key not in left or key not in right or left[key] != right[key]
         }
         return StateDiff(before.reference, after.reference, changes)
 
@@ -81,8 +81,9 @@ class InMemoryStateAdapter:
             snapshot.value, dict
         ):
             raise ValueError("only internal restorable state can be restored")
+        restored = json_safe_copy(snapshot.value)
         self.state.clear()
-        self.state.update(json_safe_copy(snapshot.value))
+        self.state.update(restored)
         return True
 
 

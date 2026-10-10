@@ -39,7 +39,8 @@ class FileArtifactStore:
             try:
                 os.link(temporary_name, destination)
             except FileExistsError:
-                pass
+                if destination.read_bytes() != content:
+                    raise RuntimeError("content-address collision") from None
         finally:
             Path(temporary_name).unlink(missing_ok=True)
         return reference, destination
