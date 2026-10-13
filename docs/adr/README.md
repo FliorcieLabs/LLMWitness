@@ -19,3 +19,11 @@ This public index preserves the existing implemented Community constraints. It d
 15. Community remains single-user localhost. Cloud/Enterprise code stays outside this repository and publication remains an explicitly authorized maintainer operation.
 
 The consolidated audit fixes restore these invariants at existing boundaries; they do not introduce a new protocol or distributed architecture. A future incompatible safety or public-contract change must include a numbered ADR documenting context, alternatives, consequences, migration and acceptance evidence before implementation.
+
+## Additive implementation decisions
+
+- [ADR 0025: metadata-only workflow capture](0025-metadata-only-workflow-capture.md)
+  adds an observation edge, not Runtime authority or another workflow engine.
+- [ADR 0026: metadata-only framework callbacks](0026-metadata-framework-callbacks.md).
+- [ADR 0027: Responses metadata wrapper](0027-responses-metadata-wrapper.md).
+- [ADR 0028: offline Proof Cards](0028-offline-proof-cards.md).

@@ -279,6 +279,9 @@ def _add_adapter_conformance_command(subparsers: argparse._SubParsersAction) -> 
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the stable local-only LLMWitness command surface."""
+    from llmwitness.capture_cli import add_capture_parser
+    from llmwitness.proof_card_cli import add_proof_card_parser
+
     parser = argparse.ArgumentParser(
         prog="llmwitness", description="Inspect and verify local LLMWitness receipts"
     )
@@ -298,6 +301,8 @@ def build_parser() -> argparse.ArgumentParser:
     _add_pilot_evidence_command(subparsers)
     _add_naming_readiness_command(subparsers)
     _add_adapter_conformance_command(subparsers)
+    add_capture_parser(subparsers)
+    add_proof_card_parser(subparsers)
     subparsers.add_parser("mcp", help="Start the local STDIO MCP server")
     return parser
 
@@ -962,7 +967,30 @@ def _handle_mcp(_: argparse.Namespace) -> None:
     run_stdio()
 
 
+def _handle_capture(args: argparse.Namespace) -> None:
+    import sys
+
+    from llmwitness.capture_cli import CaptureCliError, run_capture
+
+    try:
+        run_capture(args)
+    except CaptureCliError as exc:
+        print(f"[ERROR] {exc}", file=sys.stderr)
+        raise SystemExit(2) from None
+
+
+def _handle_proof_card(args: argparse.Namespace) -> None:
+    from llmwitness.proof_card import ProofCardError
+    from llmwitness.proof_card_cli import run_proof_card
+
+    try:
+        run_proof_card(args)
+    except ProofCardError as exc:
+        raise SystemExit(str(exc)) from None
+
+
 COMMAND_HANDLERS: dict[str, CommandHandler] = {
+    "proof-card": _handle_proof_card,
     "validate-config": _handle_validate_config,
     "verify": _handle_verify_receipt,
     "keygen": _handle_keygen,
@@ -990,6 +1018,7 @@ COMMAND_HANDLERS: dict[str, CommandHandler] = {
     "naming-readiness": _handle_naming_readiness,
     "adapter-conformance": _handle_adapter_conformance,
     "mcp": _handle_mcp,
+    "capture": _handle_capture,
 }
 
 

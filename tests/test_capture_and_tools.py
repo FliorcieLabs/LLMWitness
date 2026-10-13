@@ -410,6 +410,7 @@ def test_witness_decorator_traces_sync_and_async_functions(live):
 def test_langchain_handler_records_model_and_tool_runs(live, monkeypatch):
     with pytest.raises(ImportError, match="langchain-core"):
         monkeypatch.setitem(sys.modules, "langchain_core", None)
+        monkeypatch.setitem(sys.modules, "langchain_core.callbacks", None)
         make_langchain_handler(live)
 
     callbacks = types.ModuleType("langchain_core.callbacks")

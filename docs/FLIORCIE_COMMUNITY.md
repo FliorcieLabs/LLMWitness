@@ -26,6 +26,9 @@ intent -> authority -> contract -> atomic PREPARED reservation -> provider
 | `artifacts`, `receipts`, `evidence_bundle` | Content-addressed blobs, local signatures, bounded offline export/verification |
 | `projects`, `planning`, `community` | Local composition and policy explanation, without a second state machine |
 | `adapters`, `adapter_conformance`, `effect_conformance` | Edge translation and local fixture checks, not provider/framework certification |
+| `workflow_capture`, `capture_cli`, `integrations` | Metadata-only observation profiles, bounded offline import and optional framework callbacks; no authority or effect verification |
+| `metadata_callbacks`, `responses_capture` | Opt-in bounded framework lifecycle and plain Responses metadata observations |
+| `proof_card`, `proof_card_cli` | Offline projections of supplied reports, never authentication or verification |
 | `reliability`, `faultboard`, `recovery`, `mcp_server` | Deterministic reports, offline presentation and read-only recovery inspection |
 
 The `runtime` module is a compatibility facade, not another implementation of these phases. Optional framework dependencies remain at the integration edge. The local Passport reference module restricts Runtime authority using configured trust and process-local replay checks; it is not the independently maintained standards-based WitnessID product.
@@ -44,3 +47,8 @@ llmwitness adapter-conformance --output-dir .llmwitness/adapter-conformance
 The reference refund and CRM jobs are deterministic local fixtures, not live financial/customer operations. Passing local tests does not authorize providers, certify identity standards, admit Bench data, establish outside adoption, or approve publication.
 
 Community remains single-user localhost development. Scrubbing is best-effort pattern scrubbing. Receipts and journals are local, deletable, tamper-evident files, not immutable/WORM storage. A signature establishes integrity of recorded bytes, not external truth. Cloud/Enterprise implementation, distributed transactions, complete telemetry, comprehensive streaming support, compliance claims and production-readiness claims remain excluded.
+
+For coding-agent metadata import, a real optional LangGraph example and
+cross-component adoption paths, see [workflow adoption](WORKFLOW_ADOPTION.md)
+and [Community use cases](COMMUNITY_USE_CASES.md). Native observations stay in
+the telemetry lane, never the effect-verification state machine.
