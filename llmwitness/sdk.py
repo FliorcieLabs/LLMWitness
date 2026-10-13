@@ -476,6 +476,14 @@ class LLMWitnessTracker:
         )
         return client
 
+    def wrap_openai_responses_client(self, client: Any) -> Any:
+        """Observe plain Responses create metadata; streaming is pass-through."""
+        from llmwitness.responses_capture import wrap_responses_client
+
+        return wrap_responses_client(
+            self, client, lambda: get_current_correlation_id() or generate_uuidv7()
+        )
+
     def wrap_anthropic_client(self, client: Any) -> Any:
         """
         Wraps an Anthropic client's ``messages.create`` the same way, for

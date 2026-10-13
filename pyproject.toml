@@ -40,6 +40,9 @@ dependencies = [
 langchain = [
     "langchain-core>=0.3.0"
 ]
+langgraph = [
+    "langgraph>=1.0.0"
+]
 dev = [
     "pytest>=7.4.0",
     "hypothesis>=6.80.0",

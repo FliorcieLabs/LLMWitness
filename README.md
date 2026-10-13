@@ -33,6 +33,8 @@ These changes are on the development branch and are not part of `0.1.0`.
 - **SDK capture:** model, prompt messages, latency and an optional cost estimate from prices you supply; sync, async and streaming OpenAI and Anthropic clients; `tracker.seal()` and `trace_session(..., auto_seal=True)`.
 - **Commands:** `llmwitness serve`, `seal`, `list`, `show` (terminal or `--html`), `diff`, `verify-chain`, `export-otel` and `timestamp`.
 - **Integrations:** a `@witness` decorator and a LangChain callback handler (`llmwitness.integrations`).
+- **Workflow adoption:** bounded, offline Codex JSONL / Claude Code hook / generic metadata capture, plus a real optional LangGraph example. Start with the [workflow adoption guide](docs/WORKFLOW_ADOPTION.md); native observations are not verified external effects.
+- **Opt-in metadata extensions (unreleased):** bounded LangChain/LangGraph callbacks, plain sync/async OpenAI Responses capture, and offline report Proof Cards. See [usage and explicit limits](docs/ADOPTION_EXTENSIONS.md).
 - **Browser extension:** nothing is captured until you allow a site from the extension popup, and a visible notice stays on the page while it is recorded.
 
 ## Unreleased Community reliability workflow
@@ -103,6 +105,12 @@ external settings, create a tag/release, or publish a package.
 ## Community architecture
 
 ![LLMWitness Community architecture](docs/assets/launch/architecture.png)
+
+Choose a small [Community use case](docs/COMMUNITY_USE_CASES.md): metadata-only
+coding-agent inspection, graph correlation, policy explanation, safe response-loss
+review, deterministic fault reports or offline evidence sharing. Framework
+mapping adapters are not native SDK certifications; standalone WitnessID remains
+an optional separate package.
 
 ## Install
 
