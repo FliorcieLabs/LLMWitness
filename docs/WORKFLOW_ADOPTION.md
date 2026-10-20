@@ -78,7 +78,10 @@ Hook profile events: `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
 `SubagentStop`, `StopFailure`. Other hook types require a reviewed profile update.
 For explicit hook integration, pass a workflow-scoped UUIDv7 and a unique
 output path. Do not send capture JSONL to Claude's hook-control stdout. This
-tool neither approves nor blocks tool execution and installs no hooks.
+tool neither approves nor blocks tool execution and installs no hooks: rejected
+input exits with status 1, which Claude Code treats as a non-blocking hook error
+(status 2 would block the tool call). Command-line usage errors, such as a missing
+required option, still exit with status 2, so test a hook command before enabling it.
 
 `--input -` reads binary UTF-8 input from stdin; `--output -` writes JSONL to
 stdout. Limits: 100 KiB per record, 1,000 records, 4 MiB total input and 64 JSON

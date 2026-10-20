@@ -976,7 +976,9 @@ def _handle_capture(args: argparse.Namespace) -> None:
         run_capture(args)
     except CaptureCliError as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)
-        raise SystemExit(2) from None
+        # Exit 1, not 2: Claude Code treats a hook's exit code 2 as "block this
+        # action", and capture must never approve or block tool execution.
+        raise SystemExit(1) from None
 
 
 def _handle_proof_card(args: argparse.Namespace) -> None:
