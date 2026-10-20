@@ -261,7 +261,7 @@ def test_cli_dispatch_has_content_free_failure_and_no_stdout(monkeypatch, capsys
     )
     with pytest.raises(SystemExit) as failure:
         main(["capture", "--source", "generic", "--correlation-id", generate_uuidv7()])
-    assert failure.value.code == 2
+    assert failure.value.code == 1
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "private malformed input" not in captured.err
@@ -279,3 +279,32 @@ def test_cli_dispatch_succeeds_offline(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert json.loads(captured.out)["correlation_id"] == run_id
     assert captured.err == ""
+
+
+@pytest.mark.parametrize(
+    "hook_input",
+    [
+        b'{"hook_event_name":"Notification","session_id":"s"}',
+        b"not json",
+    ],
+    ids=["unsupported-hook-event", "malformed-hook-input"],
+)
+def test_rejected_hook_input_never_exits_with_the_blocking_code(
+    monkeypatch, capsys, hook_input
+):
+    """Claude Code reads hook exit code 2 as "block"; capture must not block."""
+    from llmwitness.cli import main
+
+    monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(hook_input)))
+    with pytest.raises(SystemExit) as failure:
+        main(
+            [
+                "capture",
+                "--source",
+                "claude-code-hook",
+                "--correlation-id",
+                generate_uuidv7(),
+            ]
+        )
+    assert failure.value.code == 1
+    assert capsys.readouterr().out == ""
