@@ -145,6 +145,54 @@ def test_catching_transaction_halt_does_not_report_verified(terminal):
     asyncio.run(exercise())
 
 
+def test_compensation_exception_does_not_strand_earlier_effects():
+    recovered = []
+
+    async def run(adapter, request, context):
+        return SimpleNamespace(state=EffectStatus.VERIFIED)
+
+    async def compensate(adapter, execution, context):
+        if adapter == "second":
+            raise OSError("refund API unavailable")
+        recovered.append(adapter)
+        return SimpleNamespace(state=EffectStatus.COMPENSATED)
+
+    async def exercise():
+        transaction = TransactionCoordinator(
+            SimpleNamespace(run=run, compensate=compensate)
+        ).transaction("test", None)
+        with pytest.raises(OSError, match="refund API unavailable") as raised:
+            async with transaction:
+                await transaction.effect("first", {})
+                await transaction.effect("second", {})
+                await transaction.effect("third", {})
+                raise ValueError("original failure")
+        assert recovered == ["third", "first"]
+        assert isinstance(raised.value.__context__, ValueError)
+        assert transaction.final_state == "manual_review"
+
+    asyncio.run(exercise())
+
+
+def test_caught_halt_after_completed_effects_requires_manual_review():
+    async def run(adapter, request, context):
+        state = EffectStatus.FAILED if adapter == "second" else EffectStatus.VERIFIED
+        return SimpleNamespace(state=state)
+
+    async def exercise():
+        transaction = TransactionCoordinator(SimpleNamespace(run=run)).transaction(
+            "test", None
+        )
+        async with transaction:
+            await transaction.effect("first", {})
+            with pytest.raises(TransactionHalted):
+                await transaction.effect("second", {})
+        assert [adapter for adapter, _ in transaction.completed] == ["first"]
+        assert transaction.final_state == "manual_review"
+
+    asyncio.run(exercise())
+
+
 @pytest.mark.parametrize("unresolved", [False, True])
 def test_transaction_compensates_in_reverse_order_and_preserves_failure(unresolved):
     recovered = []
