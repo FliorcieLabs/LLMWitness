@@ -13,7 +13,9 @@ preview = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(preview)
 
 
-@pytest.mark.parametrize("route", ["/", "/index.html", "/assets/dashboard.css", "/assets/dashboard.mjs"])
+@pytest.mark.parametrize(
+    "route", ["/", "/index.html", "/assets/dashboard.css", "/assets/dashboard.mjs"]
+)
 def test_fixed_asset_routes(route):
     target = preview.resolve_asset(route)
     assert target is not None
@@ -73,10 +75,19 @@ def test_html_has_accessible_controls_and_no_external_assets():
 
 
 def test_browser_app_has_no_network_or_raw_html_sinks():
-    source = (preview.DASHBOARD_ROOT / "assets/dashboard.mjs").read_text(encoding="utf-8")
+    source = (preview.DASHBOARD_ROOT / "assets/dashboard.mjs").read_text(
+        encoding="utf-8"
+    )
     for forbidden in (
-        "fetch(", "XMLHttpRequest", "WebSocket", "innerHTML", "outerHTML",
-        "eval(", "localStorage", "sessionStorage", "sendBeacon",
+        "fetch(",
+        "XMLHttpRequest",
+        "WebSocket",
+        "innerHTML",
+        "outerHTML",
+        "eval(",
+        "localStorage",
+        "sessionStorage",
+        "sendBeacon",
     ):
         assert forbidden not in source
     assert "generation !== state.generation" in source

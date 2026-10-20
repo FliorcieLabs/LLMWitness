@@ -12,13 +12,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
-    from llmwitness.proof_card import render_proof_card
-    from llmwitness.workflow_capture import normalize_workflow_event
-
     import llmwitness
     from llmwitness.adapter_conformance import run_adapter_conformance
+    from llmwitness.proof_card import render_proof_card
     from llmwitness.reliability import reliability_summary, run_reliability_corpus
     from llmwitness.utils import generate_uuidv7
+    from llmwitness.workflow_capture import normalize_workflow_event
 
     if not Path(llmwitness.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()):
         raise RuntimeError("use a separately installed distribution with Python -I")
