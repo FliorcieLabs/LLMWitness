@@ -13,7 +13,7 @@ intent -> authority -> contract -> atomic PREPARED reservation -> provider
                                                         VERIFIED
 ```
 
-`UNKNOWN` is not permission for blind retry. A Saga transaction compensates completed effects in reverse order when an error escapes its context. A caught effect failure must not upgrade the transaction to verified success, and no further effects may be dispatched through a halted transaction. An unexpected runner or compensation exception leaves its transaction in manual review and propagates the error. Catching a halt does not implicitly compensate earlier effects; inspect the failed transaction and use explicit recovery.
+`UNKNOWN` is not permission for blind retry. A Saga transaction compensates completed effects in reverse order when an error escapes its context. A caught effect failure must not upgrade the transaction to verified success, and no further effects may be dispatched through a halted transaction. An unexpected runner or compensation exception leaves its transaction in manual review and propagates the error; a compensation exception is raised only after every other completed effect has been offered compensation. Catching a halt does not implicitly compensate earlier effects: a transaction left with completed effects ends in manual review, so inspect it and use explicit recovery.
 
 ## Phase ownership
 
