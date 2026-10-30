@@ -42,15 +42,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
+      # Every supported Python on every OS: branch protection requires each
+      # "Pytest Matrix (Python X on OS)" check, so keep this list in step with it.
       matrix:
-        include:
-          - { os: ubuntu-latest, python-version: '3.10' }
-          - { os: ubuntu-latest, python-version: '3.11' }
-          - { os: ubuntu-latest, python-version: '3.12' }
-          - { os: ubuntu-latest, python-version: '3.13' }
-          - { os: ubuntu-latest, python-version: '3.14' }
-          - { os: macos-latest, python-version: '3.11' }
-          - { os: windows-latest, python-version: '3.11' }
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        python-version: [ '3.10', '3.11', '3.12', '3.13', '3.14' ]
 
     steps:
       - uses: actions/checkout@v4
