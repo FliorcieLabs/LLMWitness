@@ -35,6 +35,8 @@ The services remain single-process, single-user localhost tools. SQLite persiste
 
 The development branch adds a separate consequential-effect lane. `ExecutionEnvelope` is the canonical record, `SQLiteJournalStore` persists hash-linked transitions and idempotency records with WAL/full synchronization, `FileArtifactStore` owns content-addressed local artifacts, and `ReceiptService` owns signed journal-head issuance. `SafeEffectRunner` coordinates authority, contracts, prepare, execute, authoritative verification, and explicit compensation. Telemetry sessions and consequential effects have different stores and semantics; local session persistence does not confer journal guarantees on telemetry or establish provider truth.
 
+Verification and compensation results pass through `VerificationEngine`, which by default accepts evidence for 300 seconds after its `observed_at` time. While that freshness check is enabled, a VERIFIED or COMPENSATED result whose evidence is stale, or has no `observed_at`, is downgraded to UNKNOWN, because its freshness cannot be shown. Passing `max_evidence_age_seconds=None` turns the check off entirely: results are then kept as reported, with or without timestamps.
+
 Framework adapters translate event mappings and preserve UUIDv7 run identifiers and OpenTelemetry trace identifiers. Replay returns recorded envelopes without live writes by default. The local MCP server exposes validation, inspection, recovery planning, and deterministic reliability scenarios; it does not expose an effect-execution tool.
 
 `llmwitness.community` sits at the outer composition edge. It calls the
