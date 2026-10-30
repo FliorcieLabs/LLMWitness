@@ -186,7 +186,9 @@ class LLMWitnessTracker:
 
         if outcome == "delivered":
             self._consecutive_failures = 0
-            if self._spool_pending:
+            if self._spool_pending or (
+                self.spool is not None and self.spool.has_pending(_SPOOL_STREAM)
+            ):
                 self._replay_spool()
             return
 
@@ -227,7 +229,7 @@ class LLMWitnessTracker:
             if outcome == "delivered":
                 delivered += 1
         self.spool.release(_SPOOL_STREAM, claim, remaining)
-        self._spool_pending = bool(remaining)
+        self._spool_pending = bool(remaining) or self.spool.has_pending(_SPOOL_STREAM)
         self.replayed_events += delivered
         if delivered:
             logger.info("LLMWitness re-sent %d spooled telemetry event(s)", delivered)
