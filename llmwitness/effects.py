@@ -193,6 +193,12 @@ class IdempotencyCoordinator:
 
 
 class VerificationEngine:
+    """Downgrade VERIFIED/COMPENSATED results whose evidence freshness fails.
+
+    With an age limit, stale evidence and evidence without ``observed_at``
+    both become UNKNOWN. ``max_evidence_age_seconds=None`` disables the check.
+    """
+
     def __init__(self, max_evidence_age_seconds: float | None = 300.0):
         if max_evidence_age_seconds is not None and max_evidence_age_seconds < 0:
             raise ValueError("evidence age limit must be non-negative")
@@ -204,20 +210,28 @@ class VerificationEngine:
             or self.max_evidence_age_seconds is None
         ):
             return result
-        now = datetime.now(timezone.utc)
-        stale = any(
-            item.observed_at is not None
-            and (now - item.observed_at).total_seconds() > self.max_evidence_age_seconds
-            for item in result.evidence
-        )
-        if not stale:
-            return result
+        # ``max_evidence_age_seconds=None`` disables this check entirely. While
+        # it is enabled, evidence without an observation time cannot be shown
+        # to be fresh, so it is as inconclusive as stale evidence.
+        if any(item.observed_at is None for item in result.evidence):
+            detail = "verification evidence has no observation time to check freshness"
+        else:
+            now = datetime.now(timezone.utc)
+            stale = any(
+                item.observed_at is not None
+                and (now - item.observed_at).total_seconds()
+                > self.max_evidence_age_seconds
+                for item in result.evidence
+            )
+            if not stale:
+                return result
+            detail = "verification evidence exceeded the configured freshness window"
         return VerificationResult(
             EffectStatus.UNKNOWN,
             evidence=result.evidence,
             external_refs=result.external_refs,
             verifier=result.verifier,
-            detail="verification evidence exceeded the configured freshness window",
+            detail=detail,
         )
 
     async def verify(
