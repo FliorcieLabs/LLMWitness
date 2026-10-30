@@ -34,7 +34,13 @@ class AgentTransaction:
     async def effect(
         self, adapter: EffectAdapter, request: Mapping[str, Any]
     ) -> EffectExecution:
-        execution = await self.runner.run(adapter, request, self.context)
+        if self.final_state != "open":
+            raise TransactionHalted(f"transaction is {self.final_state}")
+        try:
+            execution = await self.runner.run(adapter, request, self.context)
+        except Exception:
+            self.final_state = "manual_review"
+            raise
         if execution.state == EffectStatus.VERIFIED:
             self.completed.append((adapter, execution))
             return execution
@@ -45,17 +51,34 @@ class AgentTransaction:
 
     async def __aexit__(self, exc_type: object, exc: object, traceback: object) -> bool:
         if exc is None:
-            self.final_state = "verified"
+            if self.final_state == "open":
+                self.final_state = "verified"
+            elif self.completed:
+                # A caught halt does not compensate implicitly, but completed
+                # effects are now unrecovered and need explicit review.
+                self.final_state = "manual_review"
             return False
         unresolved = False
+        first_error: Exception | None = None
         for adapter, execution in reversed(self.completed):
-            compensated = await self.runner.compensate(adapter, execution, self.context)
+            try:
+                compensated = await self.runner.compensate(
+                    adapter, execution, self.context
+                )
+            except Exception as error:
+                # Keep compensating earlier effects; one failed recovery must
+                # not strand the others.
+                unresolved = True
+                first_error = first_error or error
+                continue
             unresolved = unresolved or compensated.state != EffectStatus.COMPENSATED
         self.final_state = (
             "manual_review"
             if unresolved or self.final_state == "manual_review"
             else "compensated"
         )
+        if first_error is not None:
+            raise first_error
         return False
 
 
