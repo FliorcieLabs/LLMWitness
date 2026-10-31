@@ -37,8 +37,6 @@ The development branch adds a separate consequential-effect lane. `ExecutionEnve
 
 Verification and compensation results pass through `VerificationEngine`, which by default accepts evidence for 300 seconds after its `observed_at` time. While that freshness check is enabled, a VERIFIED or COMPENSATED result whose evidence is stale, or has no `observed_at`, is downgraded to UNKNOWN, because its freshness cannot be shown. Passing `max_evidence_age_seconds=None` turns the check off entirely: results are then kept as reported, with or without timestamps.
 
-Verification and compensation results pass through `VerificationEngine`, which by default accepts evidence for 300 seconds after its `observed_at` time. While that freshness check is enabled, a VERIFIED or COMPENSATED result whose evidence is stale, or has no `observed_at`, is downgraded to UNKNOWN, because its freshness cannot be shown. Passing `max_evidence_age_seconds=None` turns the check off entirely: results are then kept as reported, with or without timestamps.
-
 Framework adapters translate event mappings and preserve UUIDv7 run identifiers and OpenTelemetry trace identifiers. Replay returns recorded envelopes without live writes by default. The local MCP server exposes validation, inspection, recovery planning, and deterministic reliability scenarios; it does not expose an effect-execution tool.
 
 `llmwitness.community` sits at the outer composition edge. It calls the
