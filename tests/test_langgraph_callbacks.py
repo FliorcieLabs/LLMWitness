@@ -42,6 +42,9 @@ def test_real_graph_metadata_only_callbacks(graph_tracker, asynchronous):
 
 @pytest.fixture
 def graph_tracker(monkeypatch):
+    # Skip before the test body builds a LangChain callback: base CI jobs do not
+    # install the optional langgraph extra.
+    pytest.importorskip("langgraph.graph")
     monkeypatch.setenv("LANGSMITH_TRACING", "false")
     monkeypatch.setenv("LANGCHAIN_TRACING_V2", "false")
     events = []
