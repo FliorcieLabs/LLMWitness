@@ -476,6 +476,14 @@ class LLMWitnessTracker:
         )
         return client
 
+    def wrap_openai_responses_client(self, client: Any) -> Any:
+        """Observe plain Responses create metadata; streaming is pass-through."""
+        from llmwitness.responses_capture import wrap_responses_client
+
+        return wrap_responses_client(
+            self, client, lambda: get_current_correlation_id() or generate_uuidv7()
+        )
+
     def wrap_anthropic_client(self, client: Any) -> Any:
         """
         Wraps an Anthropic client's ``messages.create`` the same way, for
@@ -613,7 +621,14 @@ class _RecordingStream:
     def _finish(self) -> None:
         if not self._finished:
             self._finished = True
-            self._on_done()
+            try:
+                self._on_done()
+            except Exception as exc:
+                # Recording must not replace provider errors or break a caller
+                # that successfully consumed the response.
+                logger.warning(
+                    "LLMWitness stream recording failed (%s)", type(exc).__name__
+                )
 
     def __iter__(self):
         try:

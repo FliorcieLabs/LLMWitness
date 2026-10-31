@@ -275,6 +275,7 @@ def verify_evidence_bundle(
             if any(
                 item.is_dir()
                 or item.compress_type != zipfile.ZIP_STORED
+                or item.flag_bits & (1 | 32 | 64)
                 or item.file_size > max_bundle_bytes
                 for item in members
             ):

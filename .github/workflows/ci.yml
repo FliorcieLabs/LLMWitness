@@ -66,6 +66,10 @@ jobs:
         if: matrix.os != 'ubuntu-latest' || matrix.python-version != '3.11'
         run: pytest tests/ -v
 
+      - name: Install Optional LangGraph Callback Dependencies
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+        run: pip install -e ".[langgraph]"
+
       - name: Run Test Suite with Coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
         run: |
@@ -78,3 +82,9 @@ jobs:
           python -m pip install build twine
           python -m build
           twine check dist/*
+
+      - name: Verify Installed Wheel Workflow Adoption
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+        run: |
+          python -m pip install --no-deps --force-reinstall dist/*.whl
+          python -I scripts/verify_workflow_adoption.py
