@@ -159,11 +159,22 @@ def test_responses_original_exception_survives(asynchronous, sink_fails, caplog)
     )
     sink = Sink(fail=sink_fails)
     wrap_responses_client(sink, client, generate_uuidv7)
-    with pytest.raises(type(failure)) as error:
-        call = client.responses.create(input="SECRET")
-        if asynchronous:
-            asyncio.run(call)
-    assert error.value is failure
+    if asynchronous:
+        # Catch inside the coroutine: on Python 3.10, asyncio.run() replaces a
+        # cancelled task's CancelledError with a new one, hiding the wrapper's.
+        async def invoke():
+            try:
+                await client.responses.create(input="SECRET")
+            except BaseException as exc:  # noqa: BLE001 - asserting the exact object
+                return exc
+            return None
+
+        raised = asyncio.run(invoke())
+    else:
+        with pytest.raises(type(failure)) as error:
+            client.responses.create(input="SECRET")
+        raised = error.value
+    assert raised is failure
     assert "SECRET" not in caplog.text
     if not sink_fails:
         assert sink.events[0]["agent_state"]["status"] == "failed"
