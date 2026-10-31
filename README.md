@@ -26,13 +26,15 @@ These changes are on the development branch and are not part of `0.1.0`.
 
 - **Sessions survive a restart:** the ingestion service mirrors unsealed sessions to a local SQLite file (`LLMWITNESS_SESSION_DB`, default `.llmwitness/sessions.db`; `off` disables it). At the session limit the oldest sealed session is dropped from memory first; an unsealed session is dropped only after 24 hours without events (`LLMWITNESS_SESSION_IDLE_TTL_SECONDS`).
 - **Persistent signer:** the service creates a signing key and HMAC secret in `.llmwitness/keys` on first start, or run `llmwitness keygen`. `llmwitness verify` then requires a receipt's signer to match that key (or `LLMWITNESS_TRUSTED_FINGERPRINT`) unless `--any-signer` is given. The key file is an ordinary file: anyone who can read it can sign.
-- **Receipt chain:** each receipt signs a link to the previous one; `llmwitness verify-chain` reports a removed or re-signed receipt. This is local tamper evidence, not immutability.
+- **Receipt chain:** each receipt signs a link to the previous one; `llmwitness verify-chain` reports broken links or invalid signatures in the supplied chain. Detecting deletion of the terminal suffix requires an independently retained checkpoint. This is local tamper evidence, not immutability.
 - **Delivery retry and spool:** the SDK and gateway retry a failed submission, then write it to `.llmwitness/spool` (`LLMWITNESS_SPOOL_DIR`, `off` disables it) and re-send it later. Delivery remains best-effort and at-least-once; events are still dropped when the SDK queue is full.
 - **Scrubbing:** card numbers must pass the Luhn check, email addresses and formatted phone numbers are redacted, and `LLMWITNESS_SCRUB_RULES_FILE` adds your own patterns and field names. Names and addresses are not detected unless you register a scrubber for them.
-- **Gateway:** an Anthropic `POST /v1/messages` route, and server-sent-event pass-through for `"stream": true` on both routes. The audit copy of a stream holds the scrubbed assembled text, not the raw chunks.
+- **Gateway:** an Anthropic `POST /v1/messages` route, and experimental local server-sent-event pass-through for `"stream": true` on both routes. The audit copy holds scrubbed assembled text, not raw chunks; complete streaming capture and broad provider compatibility are not claimed.
 - **SDK capture:** model, prompt messages, latency and an optional cost estimate from prices you supply; sync, async and streaming OpenAI and Anthropic clients; `tracker.seal()` and `trace_session(..., auto_seal=True)`.
 - **Commands:** `llmwitness serve`, `seal`, `list`, `show` (terminal or `--html`), `diff`, `verify-chain`, `export-otel` and `timestamp`.
 - **Integrations:** a `@witness` decorator and a LangChain callback handler (`llmwitness.integrations`).
+- **Workflow adoption:** bounded, offline Codex JSONL / Claude Code hook / generic metadata capture, plus a real optional LangGraph example. Start with the [workflow adoption guide](docs/WORKFLOW_ADOPTION.md); native observations are not verified external effects.
+- **Opt-in metadata extensions (unreleased):** bounded LangChain/LangGraph callbacks, plain sync/async OpenAI Responses capture, and offline report Proof Cards. See [usage and explicit limits](docs/ADOPTION_EXTENSIONS.md).
 - **Browser extension:** nothing is captured until you allow a site from the extension popup, and a visible notice stays on the page while it is recorded.
 
 ## Unreleased Community reliability workflow
@@ -103,6 +105,12 @@ external settings, create a tag/release, or publish a package.
 ## Community architecture
 
 ![LLMWitness Community architecture](docs/assets/launch/architecture.png)
+
+Choose a small [Community use case](docs/COMMUNITY_USE_CASES.md): metadata-only
+coding-agent inspection, graph correlation, policy explanation, safe response-loss
+review, deterministic fault reports or offline evidence sharing. Framework
+mapping adapters are not native SDK certifications; standalone WitnessID remains
+an optional separate package.
 
 ## Install
 

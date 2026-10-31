@@ -39,6 +39,37 @@ chain.invoke(inputs, config={"callbacks": [make_langchain_handler(tracker)]})
 
 `@witness` records the task name, duration and any exception, not arguments or return values. `make_langchain_handler` needs `langchain-core` (`pip install "llmwitness[langchain]"`); its test runs against the installed library and is skipped when it is absent.
 
+## Unreleased metadata-only workflow capture
+
+`WorkflowCapture(sink).capture(source, event, correlation_id)` is an additive,
+observation-only bridge for `codex-jsonl`, `claude-code-hook` and `generic`.
+The sink implements the existing `record_event` contract; framework libraries
+are not required. Import `WorkflowCapture`, `CaptureError` and
+`normalize_workflow_event` directly from `llmwitness`.
+
+The bridge preserves caller UUIDv7, omits source content, and retains only
+allowlisted metadata and pseudonymous digest references. Native completion
+does not mean Runtime `VERIFIED`. An accepted sink call is not delivery
+confirmation. The offline normalizer retains observation time; SDK timestamps
+remain recording time. Repeated observations are not deduplicated.
+
+`llmwitness capture` validates a bounded native JSONL/hook batch before emitting
+SDK-compatible JSONL locally, with no tracker construction or network request.
+See [workflow adoption](WORKFLOW_ADOPTION.md) for format limits and quickstarts.
+
+Opt-in metadata-only framework callbacks are available from
+`llmwitness.make_metadata_langchain_handler(tracker, run_id)`. Plain sync/async
+Responses metadata capture uses `tracker.wrap_openai_responses_client(client)`.
+Both are separate from existing content-oriented handlers; see
+[adoption extensions](ADOPTION_EXTENSIONS.md) for exact supported scope,
+diagnostics, missing telemetry and streaming exclusions. The same guide covers
+`llmwitness proof-card`, an offline projection of supplied reports, not a verifier.
+Existing LangChain/LangGraph callbacks remain content-recording integrations,
+not this strict metadata-only profile. Optional real LangGraph graph tests
+require the source extra `.[langgraph]`.
+
+## Extending best-effort pattern scrubbing
+
 For names and addresses, register your own detector; it runs after the built-in patterns:
 
 ```python
