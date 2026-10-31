@@ -1,0 +1,98 @@
+{
+  "schema_version": "0.1",
+  "sample_count": 15,
+  "scenario_set_hash": "sha256:8b72dc2dd8efcf50c1e171f94619435b4d4eebeb6995cb1ba651ca0600dfa685",
+  "scenarios": [
+    {
+      "scenario_id": "reliability.v0.1:sha256:39d3d1d02fa08b59da518ee634633a74fd485b9e4a59637e7d64ec84662a0e5f",
+      "name": "api_succeeded_response_lost",
+      "invariant": "ambiguous writes remain UNKNOWN and are not repeated",
+      "expected_pass": true
+    },
+    {
+      "scenario_id": "reliability.v0.1:sha256:c60ff25716c7daf947bcb56588efba14e12387d070cb33a3b99d4cd0fe990d14",
+      "name": "authority_revoked",
+      "invariant": "consequential effect fails closed",
+      "expected_pass": true
+    },
+    {
+      "scenario_id": "reliability.v0.1:sha256:90d073796171eb2e3f3f6ae6d22c75b80b505bba3155ad43d18e76e55d3ab278",
+      "name": "client_timeout_before_completion",
+      "invariant": "timeout does not become a false failure or blind retry",
+      "expected_pass": true
+    },
+    {
+      "scenario_id": "reliability.v0.1:sha256:d9614d6c6f9812e1b15627e1340b80e4181c1c72c4caf3978cdf0a4b28f3388a",
+      "name": "compensation_failed",
+      "invariant": "manual review remains visible",
+      "expected_pass": true
+    },
+    {
+      "scenario_id": "reliability.v0.1:sha256:e186045442db69cf96c1a89f3aa0a4b2152277acb963ff2005f6b95479dc0067",
+      "name": "compensation_response_lost",
+      "invariant": "compensation is verified before retry",
+      "expected_pass": true
+    },
+    {
+      "scenario_id": "reliability.v0.1:sha256:3104daf210fce005e0fdd6a06ebe734c91fa6c6ff800485e2263a90732dd3dda",
+      "name": "concurrent_same_resource",
+      "invariant": "compare-and-set reports the conflict",
+      "expected_pass": true
+    },
+    {
+      "scenario_id": "reliability.v0.1:sha256:e6a965d8f2f686c0efdcc4b2e731f4e78a5e41c80979dff16e73aed94622815c",
+      "name": "crash_after_effect_before_commit",
+      "invariant": "PREPARED/EXECUTING state is reconcilable",
+      "expected_pass": true
+    },
+    {
+      "scenario_id": "reliability.v0.1:sha256:1fc9eba82c2f69c6634b319818e897b65c9f7f0efa77890b9f092c0cda58993f",
+      "name": "crash_after_prepare_before_execute",
+      "invariant": "no external effect is claimed as verified",
+      "expected_pass": true
+    },
+    {
+      "scenario_id": "reliability.v0.1:sha256:a21cacc7bea5ab68020780e5eb750e0c2ac4fb4d1dd1d49d8eaee53b4cb0a885",
+      "name": "duplicate_same_idempotency_key",
+      "invariant": "one logical key cannot create a second effect",
+      "expected_pass": true
+    },
+    {
+      "scenario_id": "reliability.v0.1:sha256:a505c1675a5f31447649bd563b34c5c0149e1518477c0391cd0c1c33644c694a",
+      "name": "model_only_high_risk_gate",
+      "invariant": "a model judgment is not the sole R2/R3 authority",
+      "expected_pass": true
+    },
+    {
+      "scenario_id": "reliability.v0.1:sha256:d468fbf852ee76ed310f7d4386d376afa49b9cdcede8c4ba2906088ebd4dfd34",
+      "name": "provider_rate_limited_before_dispatch",
+      "invariant": "a definitively rejected request cannot create or verify an effect",
+      "expected_pass": true
+    },
+    {
+      "scenario_id": "reliability.v0.1:sha256:16e363c1b1abde4d57632a0d8b1282d05e0d5eace5d62ecdc28ded4b73ba4277",
+      "name": "signer_rotation",
+      "invariant": "historical heads retain key identity metadata",
+      "expected_pass": true
+    },
+    {
+      "scenario_id": "reliability.v0.1:sha256:28a38f2e92cb5d735e9e098b197af0e85743ef1e5cf2e57603e5b1b50ab8c5ce",
+      "name": "stale_verifier",
+      "invariant": "stale evidence cannot produce VERIFIED",
+      "expected_pass": true
+    },
+    {
+      "scenario_id": "reliability.v0.1:sha256:0ab6bc7cbcab3034ac58fd0c6a97f02dfdb0452136e18ef7746f06dfe41773e4",
+      "name": "tool_output_poisoning",
+      "invariant": "untrusted tool output cannot self-assert VERIFIED or enter the journal",
+      "expected_pass": true
+    },
+    {
+      "scenario_id": "reliability.v0.1:sha256:0c0d15231507f3905f7034ba6e447ef6d02855ab828a36c3a2f9a62c55c66b9a",
+      "name": "verifier_disagreement",
+      "invariant": "conflicting verification cannot produce VERIFIED",
+      "expected_pass": true
+    }
+  ],
+  "limitations": "Deterministic local scenario comparison; not a universal safety, production, compliance, provider, or performance score."
+}
