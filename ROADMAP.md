@@ -9,7 +9,7 @@ Roadmap items are plans, not commitments or currently available capabilities.
 - In-memory local ingestion and per-session tamper-evident receipts.
 - Browser SDK, opt-in extension, and receipt-verification CLI.
 
-Near-term Community work: durable delivery options, OpenTelemetry export, stronger schema limits, consent controls for browser capture, streaming research, and reproducible installed-package tests.
+Near-term Community work: stronger schema limits and reproducible installed-package tests. Durable delivery options, OpenTelemetry export, consent controls for browser capture and gateway streaming are implemented on the development branch and not yet released.
 
 ## Cloud — planned and proprietary
 

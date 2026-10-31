@@ -281,10 +281,11 @@ def test_an_unusable_receipt_directory_reports_insufficient_storage(
 def test_a_failed_receipt_write_reports_insufficient_storage(
     client, tmp_path, monkeypatch
 ):
-    def failing_open(*args, **kwargs):
+    def failing_mkstemp(*args, **kwargs):
         raise OSError("no space left on device")
 
-    monkeypatch.setattr(ingest.Path, "open", failing_open)
+    # Receipts are written to a temporary file and then published atomically.
+    monkeypatch.setattr(ingest.tempfile, "mkstemp", failing_mkstemp)
     correlation_id = generate_uuidv7()
     client.post("/ingest/sdk", json=_sdk_event(correlation_id))
 
@@ -312,6 +313,7 @@ def test_an_empty_session_still_produces_a_verifiable_receipt(client, tmp_path):
     )
     assert receipt["events"]["sdk"] == []
     assert receipt["events"]["extension"] == []
-    assert receipt["receipt_version"] == 1
+    assert receipt["receipt_version"] == 2
+    assert receipt["chain"] == {"index": 0, "previous_receipt_hash": None}
     assert receipt["signature_algorithm"] == "Ed25519"
     assert sealed.json()["public_key_fingerprint"] == receipt["public_key_fingerprint"]

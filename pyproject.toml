@@ -25,15 +25,21 @@ classifiers = [
     "Topic :: System :: Logging",
     "Topic :: Software Development :: Libraries :: Python Modules"
 ]
+# Minimums are the oldest releases with no known advisories at the time of
+# writing; re-check them with `pip-audit` when raising or relaxing a bound.
 dependencies = [
-    "fastapi>=0.100.0",
+    "fastapi>=0.134.0",
+    "starlette>=1.3.1",
     "uvicorn>=0.22.0",
-    "cryptography>=41.0.0",
+    "cryptography>=50.0.0",
     "httpx>=0.24.0",
-    "pydantic>=2.0.0"
+    "pydantic>=2.10.0"
 ]
 
 [project.optional-dependencies]
+langchain = [
+    "langchain-core>=0.3.0"
+]
 dev = [
     "pytest>=7.4.0",
     "hypothesis>=6.80.0",
@@ -46,9 +52,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/llmwitness/LLMWitness"
-Repository = "https://github.com/llmwitness/LLMWitness.git"
-Issues = "https://github.com/llmwitness/LLMWitness/issues"
+Homepage = "https://github.com/FliorcieLabs/LLMWitness"
+Repository = "https://github.com/FliorcieLabs/LLMWitness.git"
+Issues = "https://github.com/FliorcieLabs/LLMWitness/issues"
 
 [project.scripts]
 llmwitness = "llmwitness.cli:main"

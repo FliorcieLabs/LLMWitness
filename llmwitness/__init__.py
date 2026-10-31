@@ -6,6 +6,9 @@ __version__ = "0.1.0"
 __author__ = "LLMWitness maintainers"
 __license__ = "Apache-2.0"
 
+from llmwitness.artifacts import FileArtifactStore
+from llmwitness.envelope import ExecutionEnvelope
+from llmwitness.journal import SQLiteJournalStore
 from llmwitness.sdk import LLMWitnessTracker, get_current_correlation_id, trace_session
 from llmwitness.utils import (
     Ed25519KeyManager,
@@ -13,6 +16,9 @@ from llmwitness.utils import (
     generate_uuidv7,
     redact_payload,
     redact_pii,
+    register_scrub_pattern,
+    register_sensitive_field,
+    register_text_scrubber,
     verify_proof_receipt,
 )
 
@@ -24,8 +30,14 @@ __all__ = [
     "trace_session",
     "redact_pii",
     "redact_payload",
+    "register_scrub_pattern",
+    "register_sensitive_field",
+    "register_text_scrubber",
     "generate_uuidv7",
     "verify_proof_receipt",
     "Ed25519KeyManager",
     "compute_hmac_signature",
+    "ExecutionEnvelope",
+    "SQLiteJournalStore",
+    "FileArtifactStore",
 ]
