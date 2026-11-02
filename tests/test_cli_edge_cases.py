@@ -128,6 +128,37 @@ def test_trusted_fingerprint_is_compared_case_insensitively(
     assert "does not match the trusted value" in capsys.readouterr().out
 
 
+def test_signer_mismatch_names_the_trust_source_without_echoing_key_material(
+    monkeypatch, tmp_path, capsys
+):
+    from llmwitness import keys
+
+    monkeypatch.delenv("LLMWITNESS_SECRET_KEY", raising=False)
+    monkeypatch.delenv("LLMWITNESS_TRUSTED_FINGERPRINT", raising=False)
+    monkeypatch.setenv("LLMWITNESS_KEY_DIR", str(tmp_path / "keys"))
+    local = keys.create_identity().fingerprint
+    path, receipt = _receipt_file(tmp_path)
+
+    assert _run(monkeypatch, ["verify", str(path)]) == 1
+    out = capsys.readouterr().out
+    assert "Trusted fingerprint source: the local signing key" in out
+    assert receipt["public_key_fingerprint"] in out
+    assert local not in out
+
+    monkeypatch.setenv("LLMWITNESS_TRUSTED_FINGERPRINT", "a" * 64)
+    assert _run(monkeypatch, ["verify", str(path)]) == 1
+    out = capsys.readouterr().out
+    assert "Trusted fingerprint source: LLMWITNESS_TRUSTED_FINGERPRINT" in out
+    assert "a" * 64 not in out
+
+    assert (
+        _run(monkeypatch, ["verify", str(path), "--trusted-fingerprint", "b" * 64]) == 1
+    )
+    assert (
+        "Trusted fingerprint source: --trusted-fingerprint" in capsys.readouterr().out
+    )
+
+
 def test_a_receipt_without_a_fingerprint_string_is_refused(
     monkeypatch, tmp_path, capsys
 ):
