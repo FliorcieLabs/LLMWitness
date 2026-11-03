@@ -333,10 +333,13 @@ def _handle_verify_receipt(args: argparse.Namespace) -> None:
     if not isinstance(fingerprint, str) or not fingerprint:
         print("[FAIL] Receipt does not contain a public-key fingerprint.")
         raise SystemExit(1)
-    trusted, trust_source = _trusted_fingerprint(args)
+    trusted = _trusted_fingerprint(args)
+    # The label is derived from which option is set, never from key material, so
+    # nothing read from the key directory or the HMAC secret reaches the output.
+    trust_source = _trust_source(args)
     if trusted is not None and fingerprint.lower() != trusted.lower():
         print("[FAIL] Receipt signer fingerprint does not match the trusted value.")
-        print(f"Trusted fingerprint ({trust_source}): {trusted}")
+        print(f"Trusted fingerprint source: {trust_source}")
         print(f"Receipt signer fingerprint: {fingerprint}")
         raise SystemExit(1)
     if secret:
@@ -350,19 +353,29 @@ def _handle_verify_receipt(args: argparse.Namespace) -> None:
     print(f"Signer fingerprint: {fingerprint}")
 
 
-def _trusted_fingerprint(args: argparse.Namespace) -> tuple[str | None, str]:
-    """Pick the fingerprint a receipt's signer must match, and say where it came from."""
+def _trusted_fingerprint(args: argparse.Namespace) -> str | None:
+    """Pick the fingerprint a receipt's signer must match, if any."""
     if args.trusted_fingerprint is not None:
-        return args.trusted_fingerprint, "--trusted-fingerprint"
+        return str(args.trusted_fingerprint)
     if getattr(args, "any_signer", False):
-        return None, ""
+        return None
     from_env = os.getenv("LLMWITNESS_TRUSTED_FINGERPRINT")
     if from_env:
-        return from_env, "LLMWITNESS_TRUSTED_FINGERPRINT"
+        return from_env
     from llmwitness.keys import local_trusted_fingerprint
 
-    local = local_trusted_fingerprint()
-    return (local, "the local signing key") if local else (None, "")
+    return local_trusted_fingerprint() or None
+
+
+def _trust_source(args: argparse.Namespace) -> str:
+    """Name where the trusted fingerprint comes from, using the same precedence."""
+    if args.trusted_fingerprint is not None:
+        return "--trusted-fingerprint"
+    if getattr(args, "any_signer", False):
+        return ""
+    if os.getenv("LLMWITNESS_TRUSTED_FINGERPRINT"):
+        return "LLMWITNESS_TRUSTED_FINGERPRINT"
+    return "the local signing key"
 
 
 def _handle_keygen(args: argparse.Namespace) -> None:
