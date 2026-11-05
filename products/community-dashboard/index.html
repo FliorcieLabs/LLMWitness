@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="color-scheme" content="dark light">
+  <title>Fliorcie Labs · Community evidence workspace</title>
+  <link rel="stylesheet" href="./assets/dashboard.css">
+  <script type="module" src="./assets/dashboard.mjs"></script>
+</head>
+<body>
+  <a class="skip" href="#workspace">Skip to evidence workspace</a>
+  <aside class="sidebar" aria-label="Workspace navigation">
+    <a class="brand" href="#workspace" aria-label="Fliorcie Labs home"><span class="brand-mark" aria-hidden="true">f<span>l</span></span><span>fliorcie<span class="brand-sub">LABS / COMMUNITY</span></span></a>
+    <div class="workspace-label">YOUR WORKSPACE <span>01</span></div>
+    <nav class="nav" aria-label="Report views">
+      <button class="nav-item active" data-view="overview" aria-pressed="true"><span aria-hidden="true">◫</span> Overview <kbd>01</kbd></button>
+      <button class="nav-item" data-view="workflow" aria-pressed="false"><span aria-hidden="true">⌁</span> Observations <kbd>02</kbd></button>
+      <button class="nav-item" data-view="reliability" aria-pressed="false"><span aria-hidden="true">◉</span> Reliability <kbd>03</kbd></button>
+      <button class="nav-item" data-view="adapters" aria-pressed="false"><span aria-hidden="true">⧉</span> Adapter reports <kbd>04</kbd></button>
+      <button class="nav-item" data-view="proof-card" aria-pressed="false"><span aria-hidden="true">◇</span> Proof Cards <kbd>05</kbd></button>
+    </nav>
+    <div class="sidebar-note"><span class="mini-eyebrow">LOCAL BY DESIGN</span><h3>Your evidence.<br>Your machine.</h3><p>No accounts. No uploads.<br>No provider actions.</p><span class="local-pill"><span class="dot"></span> Browser-local memory</span></div>
+    <div class="sidebar-footer"><span class="mono">FL-DASH-001</span><span>UNRELEASED</span></div>
+  </aside>
+  <div class="app">
+    <header class="topbar"><div class="breadcrumb">Community <span>/</span> <strong id="view-name">Overview</strong></div><div class="top-actions"><span class="local-pill"><span class="dot"></span> Read-only workspace</span><button id="theme" class="icon-button" aria-label="Switch to light theme" title="Switch theme">◐</button></div></header>
+    <main id="workspace" tabindex="-1">
+      <section class="hero">
+        <div><div class="eyebrow"><span class="accent-line"></span> THE LOCAL EVIDENCE PLANE</div><h1>Less guesswork.<br><span>More evidence.</span></h1><p>Explore what your agent workflows reported.<br>Keep uncertainty visible. Keep the evidence local.</p></div>
+        <div class="hero-actions"><button class="button primary" id="import">＋ Import local reports</button><button class="button secondary" id="demo">Explore synthetic demo <span aria-hidden="true">↗</span></button><span class="hero-hint">JSON / JSONL · up to 1 MiB per file</span><input id="files" type="file" accept=".json,.jsonl,application/json" multiple hidden aria-label="Choose local report files"></div>
+      </section>
+      <div class="mode-banner" id="mode-banner"><span class="mode-dot"></span><span id="mode-text">No reports loaded. Import local files or explore the synthetic demo.</span><button id="clear" class="text-button" hidden>Clear workspace</button></div>
+      <div id="message" class="message" role="status" aria-live="polite"></div>
+      <section class="metrics" aria-label="Supplied report counts">
+        <article class="metric"><div class="metric-label">Imported reports <span aria-hidden="true">↗</span></div><strong id="report-count">0</strong><span class="metric-hint">Explicit file selection only</span></article>
+        <article class="metric"><div class="metric-label">Reported passes <span class="metric-symbol good" aria-hidden="true">✓</span></div><strong id="passed-count">—</strong><span class="metric-hint">Local fixture declarations</span></article>
+        <article class="metric"><div class="metric-label">Reported failures <span class="metric-symbol bad" aria-hidden="true">!</span></div><strong id="failed-count">—</strong><span class="metric-hint">Never hidden by a score</span></article>
+        <article class="metric"><div class="metric-label">Unknown declarations <span class="metric-symbol warn" aria-hidden="true">?</span></div><strong id="unknown-count">—</strong><span class="metric-hint">Not permission to retry</span></article>
+      </section>
+      <section class="pipeline panel" aria-labelledby="pipeline-heading"><div class="section-header"><div><span class="mini-eyebrow">CONNECTED, NOT COUPLED</span><h2 id="pipeline-heading">One workflow. Distinct responsibilities.</h2></div><span class="small-label">ARCHITECTURE MAP / NOT LIVE STATUS</span></div><div class="pipeline-track">
+        <button class="pipeline-node" data-focus="workflow"><span class="node-number">01</span><span><strong>Observe</strong><small>LLMWitness metadata</small></span><span class="node-icon" aria-hidden="true">⌁</span></button><span class="pipeline-arrow" aria-hidden="true">→</span>
+        <button class="pipeline-node" data-focus="proof-card"><span class="node-number">02</span><span><strong>Bound authority</strong><small>WitnessID / local policy</small></span><span class="node-icon" aria-hidden="true">◇</span></button><span class="pipeline-arrow" aria-hidden="true">→</span>
+        <div class="pipeline-node static"><span class="node-number">03</span><span><strong>Control effects</strong><small>Runtime / explicit recovery</small></span><span class="node-icon" aria-hidden="true">⧉</span></div><span class="pipeline-arrow" aria-hidden="true">→</span>
+        <button class="pipeline-node" data-focus="reliability"><span class="node-number">04</span><span><strong>Test locally</strong><small>Reliability / report fixtures</small></span><span class="node-icon" aria-hidden="true">◉</span></button>
+      </div><p class="pipeline-note">This viewer runs none of these phases. A native completion is an observation, not a verified external effect.</p></section>
+      <div class="workspace-grid">
+        <section class="panel explorer" aria-labelledby="explorer-title"><div class="section-header"><div><span class="mini-eyebrow">INSPECT THE DECLARATIONS</span><h2 id="explorer-title">Evidence explorer</h2></div><span id="row-count" class="count-pill">0 entries</span></div>
+          <div class="toolbar"><label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Search fixed labels or run IDs" aria-label="Search observations"></label><label class="filter-label"><span class="sr-only">Filter declared status</span><select id="status"><option value="all">All statuses</option><option value="passed">Passed</option><option value="failed">Failed</option><option value="unknown">Unknown</option><option value="not_checked">Not checked</option><option value="completed">Completed</option><option value="started">Started</option><option value="allowed">Allowed</option><option value="denied">Denied</option></select></label></div>
+          <div class="table-scroll"><table><thead><tr><th scope="col">OBSERVATION</th><th scope="col">DECLARED STATUS</th><th scope="col">LOCAL DURATION</th></tr></thead><tbody id="rows"></tbody></table></div>
+          <div class="empty" id="empty"><span class="empty-orbit" aria-hidden="true">◇</span><h3>Your evidence starts here.</h3><p>Import reports from Community tools.<br>No synthetic data is loaded automatically.</p></div><div class="table-footer"><span id="shown-count">No entries to display</span><button id="more" class="text-button" hidden>Show next 100</button></div>
+        </section>
+        <aside class="panel inspector" aria-labelledby="inspector-title"><div class="section-header"><div><span class="mini-eyebrow">METADATA ONLY</span><h2 id="inspector-title">Observation detail</h2></div><span aria-hidden="true">↗</span></div><div id="detail" class="detail"><div class="detail-placeholder"><span aria-hidden="true">⌁</span><h3>Select an observation</h3><p>Inspect minimized metadata without exposing prompts, tool arguments or credentials.</p></div></div><div class="inspector-note"><span aria-hidden="true">◇</span><p>Supplied reports are not authenticated. A digest references bytes; it does not verify a declaration.</p></div></aside>
+      </div>
+      <section class="connections" aria-labelledby="connections-title"><div class="section-header"><div><span class="mini-eyebrow">BRING YOUR EXISTING WORKFLOW</span><h2 id="connections-title">Report paths, not a new orchestrator.</h2></div><button id="export" class="button secondary" disabled>↓ Export minimized snapshot</button></div><div class="connection-grid"><article class="connection"><span class="connection-icon" aria-hidden="true">⌁</span><h3>Workflow observations</h3><p>Codex, Claude Code and normalized SDK metadata JSONL.</p><span class="connection-tag">No prompts or tool content</span></article><article class="connection"><span class="connection-icon" aria-hidden="true">◉</span><h3>Reliability fixtures</h3><p>Local scenario counts, outcomes and timing from existing reports.</p><span class="connection-tag">Not a universal safety score</span></article><article class="connection"><span class="connection-icon" aria-hidden="true">⧉</span><h3>Adapter conformance</h3><p>Local mapping fixtures across supported translation boundaries.</p><span class="connection-tag">Not native SDK certification</span></article><article class="connection"><span class="connection-icon" aria-hidden="true">◇</span><h3>Proof Card summaries</h3><p>Declared bundle and authority checks. Missing stays not checked.</p><span class="connection-tag">No credential verification</span></article></div></section>
+      <footer><strong>Fliorcie Community · FL-DASH-001</strong><p>Single-user local report viewer. Best-effort pattern scrubbing; local, deletable, tamper-evident receipts—not immutable/WORM storage. No complete telemetry, compliance, production readiness or external-truth claim.</p><span class="mono">NO UPLOADS / NO ACTION EXECUTION / NO HOSTED SERVICE</span></footer>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,4 @@
+{"type":"workflow.started","session_id":"synthetic-session"}
+{"type":"tool.completed","event_id":"synthetic-tool"}
+{"type":"usage","usage":{"input_tokens":10,"output_tokens":4}}
+{"type":"workflow.completed","session_id":"synthetic-session"}

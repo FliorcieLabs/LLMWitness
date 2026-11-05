@@ -9,7 +9,25 @@ Roadmap items are plans, not commitments or currently available capabilities.
 - In-memory local ingestion and per-session tamper-evident receipts.
 - Browser SDK, opt-in extension, and receipt-verification CLI.
 
-Near-term Community work: durable delivery options, OpenTelemetry export, stronger schema limits, consent controls for browser capture, streaming research, and reproducible installed-package tests.
+Near-term Community work: stronger schema limits and reproducible installed-package tests. Durable delivery options, OpenTelemetry export, consent controls for browser capture and gateway streaming are implemented on the development branch and not yet released.
+
+## Community adoption — unreleased development work
+
+- Metadata-only Codex JSONL, Claude Code hook and framework-neutral observation
+  capture, with bounded offline CLI import and explicit UUIDv7 correlation.
+- A real local LangGraph example and optional callback tests, without a paid model.
+- [Workflow adoption guide](docs/WORKFLOW_ADOPTION.md) and
+  [connected Community use cases](docs/COMMUNITY_USE_CASES.md).
+
+- Opt-in bounded metadata-only LangChain/LangGraph model/tool callbacks.
+- Plain sync/async OpenAI Responses metadata capture, with native local mock tests.
+- Offline minimized report Proof Cards with strict parsing and no-overwrite output.
+- [Extension usage and limits](docs/ADOPTION_EXTENSIONS.md).
+
+These are implemented locally but unreleased, not universal framework support, a new
+orchestrator, accepted Passport decisions or evidence of outside adoption.
+Provider credentials/approvals, independent pilot evidence, Bench governance,
+release controls and naming/IP clearance remain human-controlled gates.
 
 ## Cloud — planned and proprietary
 

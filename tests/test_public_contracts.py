@@ -44,6 +44,13 @@ def test_cli_validate_config_success_and_failure(monkeypatch, capsys):
     assert "bad config" in capsys.readouterr().out
 
 
+def test_cli_accepts_explicit_arguments_without_mutating_process_argv(capsys):
+    cli.main(["schema", "--compact"])
+
+    schema = json.loads(capsys.readouterr().out)
+    assert schema["title"] == "ExecutionEnvelope"
+
+
 def test_cli_rejects_missing_and_invalid_receipts(tmp_path, monkeypatch, capsys):
     missing = tmp_path / "missing.json"
     monkeypatch.setattr(sys, "argv", ["llmwitness", "verify", str(missing)])

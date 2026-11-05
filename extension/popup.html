@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>LLMWitness capture</title>
+  <style>
+    body { font: 13px/1.5 system-ui, sans-serif; width: 300px; margin: 12px; }
+    h1 { font-size: 14px; margin: 0 0 8px; }
+    button { font: inherit; padding: 4px 10px; cursor: pointer; }
+    ul { list-style: none; padding: 0; margin: 8px 0 0; }
+    li { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; }
+    code { overflow-wrap: anywhere; }
+    .muted { color: #666; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #1c1f23; color: #e6e9ed; }
+      .muted { color: #9aa4af; }
+    }
+  </style>
+</head>
+<body>
+  <h1>LLMWitness capture</h1>
+  <p id="current" class="muted">Checking this tab…</p>
+  <button id="toggle" hidden></button>
+  <h1 style="margin-top:14px">Sites allowed to be recorded</h1>
+  <ul id="sites"></ul>
+  <p class="muted">Recording sends page structure and interaction events (not typed
+    text) to the ingestion service on this computer.</p>
+  <script src="popup.js"></script>
+</body>
+</html>

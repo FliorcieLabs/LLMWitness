@@ -1,0 +1,51 @@
+{
+  "schema_version": "0.1",
+  "project_id": "reference-crm",
+  "actor": {
+    "agent_id": "reference-workflow-agent",
+    "principal_id": "local-user"
+  },
+  "authority": {
+    "policy_id": "reference-local-policy",
+    "allowed_effects": [
+      "reference.refund",
+      "reference.crm-update"
+    ],
+    "allowed_principals": [
+      "local-user"
+    ],
+    "maximum_risk": "R2",
+    "maximum_delegation_depth": 0
+  },
+  "contract": {
+    "contract_id": "refund-local-contract",
+    "budgets": {
+      "amount": 100.0
+    }
+  },
+  "journal": {
+    "path": ".llmwitness/journal.db"
+  },
+  "jobs": [
+    {
+      "job_id": "update-customer",
+      "risk_tier": "R2",
+      "delegation_depth": 0,
+      "contract": {
+        "contract_id": "crm-local-contract",
+        "budgets": {
+          "record_updates": 1.0,
+          "field_updates": 3.0
+        }
+      },
+      "adapter": "reference.crm-update",
+      "request": {
+        "record_id": "customer-demo-001",
+        "fields": {
+          "status": "refunded",
+          "workflow": "reference"
+        }
+      }
+    }
+  ]
+}
